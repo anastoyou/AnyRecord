@@ -114,6 +114,7 @@ export function useCloudinaryConnection(options?: {
 	const authTokenRef = useRef<string | null>(authToken);
 	authTokenRef.current = authToken;
 	const hasLoadedStatusRef = useRef(false);
+	const isConnectingRef = useRef(false);
 
 	useEffect(() => {
 		purgeLegacyCloudinaryConfig();
@@ -329,6 +330,7 @@ export function useCloudinaryConnection(options?: {
 			return;
 		}
 		return window.electronAPI.onCloudinaryStatusChanged((payload) => {
+			isConnectingRef.current = false;
 			setIsConnecting(false);
 			if (payload.status) {
 				const s = payload.status;
@@ -390,6 +392,9 @@ export function useCloudinaryConnection(options?: {
 	}, []);
 
 	const connect = useCallback(async (): Promise<{ success: boolean; error?: string }> => {
+		if (isConnectingRef.current) {
+			return { success: false, error: "Cloudinary authorization is already in progress." };
+		}
 		if (!authTokenRef.current) {
 			const msg = "Sign in to AnyRecord to connect your Cloudinary account.";
 			setErrorMessage(msg);
@@ -402,12 +407,14 @@ export function useCloudinaryConnection(options?: {
 		}
 		setErrorMessage(null);
 		setIsConnecting(true);
+		isConnectingRef.current = true;
 		try {
 			const res = await window.electronAPI.cloudinaryStartOAuth({
 				authToken: authTokenRef.current,
 			});
 			if (!res.success) {
 				const msg = res.error || "Failed to start Cloudinary OAuth authorization.";
+				isConnectingRef.current = false;
 				setIsConnecting(false);
 				setErrorMessage(msg);
 				return { success: false, error: msg };
@@ -415,6 +422,7 @@ export function useCloudinaryConnection(options?: {
 			return { success: true };
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : "Failed to start Cloudinary OAuth";
+			isConnectingRef.current = false;
 			setIsConnecting(false);
 			setErrorMessage(msg);
 			return { success: false, error: msg };
@@ -422,10 +430,12 @@ export function useCloudinaryConnection(options?: {
 	}, []);
 
 	const cancelConnect = useCallback(() => {
+		isConnectingRef.current = false;
 		setIsConnecting(false);
 	}, []);
 
 	const disconnect = useCallback(async (): Promise<{ success: boolean; error?: string }> => {
+		isConnectingRef.current = false;
 		if (typeof window === "undefined" || !window.electronAPI?.cloudinaryDisconnect) {
 			return { success: false, error: "Disconnect not available" };
 		}

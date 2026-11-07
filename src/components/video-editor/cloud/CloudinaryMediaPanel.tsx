@@ -152,9 +152,9 @@ export function CloudinaryMediaPanel({ authToken, accountId, accountLabel, onSig
 
 	if (!authToken) {
 		return (
-			<div className="flex h-64 flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
+			<div className="flex h-64 flex-col items-center justify-center gap-3 text-center text-sm text-muted-foreground">
 				<Cloud weight="fill" className="size-8 opacity-40" />
-				<p>Sign in to AnyRecord to connect your Cloudinary account.</p>
+				<p>Sign in to AnyRecord to connect your personal cloud storage.</p>
 				{onSignIn && (
 					<Button variant="secondary" onClick={onSignIn}>
 						Sign in
@@ -174,12 +174,12 @@ export function CloudinaryMediaPanel({ authToken, accountId, accountLabel, onSig
 
 	if (!account.connected) {
 		return (
-			<div className="flex h-64 flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
+			<div className="flex h-64 flex-col items-center justify-center gap-3 text-center text-sm text-muted-foreground">
 				<Cloud weight="fill" className="size-8 opacity-40" />
-				<p>
+				<p className="max-w-md">
 					{isConnecting
-						? "Waiting for Cloudinary authorization…"
-						: errorMessage || "Connect Cloudinary to upload and share media."}
+						? "Waiting for Cloudinary authorization in your browser…"
+						: errorMessage || "Connect Cloudinary to store recordings in your own private cloud."}
 				</p>
 				{isConnecting ? (
 					<Button variant="secondary" onClick={cancelConnect}>

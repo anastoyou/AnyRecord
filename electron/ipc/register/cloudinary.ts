@@ -1014,6 +1014,9 @@ export function registerCloudinaryHandlers() {
 		}
 	});
 
+	let lastOAuthLaunchTime = 0;
+	let lastOAuthState: string | null = null;
+
 	ipcMain.handle(
 		"cloudinary-oauth-start",
 		async (_event, input?: { authToken?: unknown; loginHint?: unknown }) => {
@@ -1040,6 +1043,15 @@ export function registerCloudinaryHandlers() {
 				) {
 					throw new Error("Refusing to open untrusted OAuth authorization URL.");
 				}
+
+				// Guard against accidental double-clicks or duplicate triggers spawning multiple tabs
+				const now = Date.now();
+				if (now - lastOAuthLaunchTime < 3500 && lastOAuthState) {
+					console.warn("[cloudinary] Throttling duplicate OAuth browser launch within 3.5s window");
+					return { success: true, state: lastOAuthState };
+				}
+				lastOAuthLaunchTime = now;
+				lastOAuthState = state;
 
 				await shell.openExternal(authorizeUrl);
 				return { success: true, state };
