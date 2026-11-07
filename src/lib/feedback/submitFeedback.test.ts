@@ -1,9 +1,12 @@
 import { beforeEach, expect, it, vi } from "vitest";
+
 const api = vi.hoisted(() => ({ getUser: vi.fn(), invoke: vi.fn() }));
 vi.mock("@/lib/auth/recordlyAuth", () => ({
 	recordlyAuth: { auth: { getUser: api.getUser }, functions: { invoke: api.invoke } },
 }));
+
 import { feedbackErrorMessage, submitFeedback } from "./submitFeedback";
+
 const input = {
 	title: " Bug ",
 	subject: "bug",
@@ -77,5 +80,41 @@ it("aborts a stalled request after one minute and permits a subsequent submissio
 		await expect(submitFeedback(input)).resolves.toBeUndefined();
 	} finally {
 		vi.useRealTimers();
+	}
+});
+
+it("stores feedback in table via electronAPI.submitUserFeedback when running in desktop app", async () => {
+	const submitUserFeedback = vi.fn().mockResolvedValue({
+		success: true,
+		feedbackId: "feedback-123",
+		createdAt: new Date().toISOString(),
+	});
+	vi.stubGlobal("window", {
+		electronAPI: { submitUserFeedback },
+	});
+
+	try {
+		await submitFeedback({
+			title: "Feature request",
+			subject: "feature",
+			message: "Add more presets",
+			email: "user@example.com",
+			userName: "Alex",
+			logs: "log line 1",
+		});
+
+		expect(submitUserFeedback).toHaveBeenCalledTimes(1);
+		expect(submitUserFeedback).toHaveBeenCalledWith(
+			expect.objectContaining({
+				subject: "Feature request",
+				message: "Add more presets",
+				category: "feature",
+				userEmail: "user@example.com",
+				userName: "Alex",
+			}),
+		);
+		expect(api.invoke).not.toHaveBeenCalled();
+	} finally {
+		vi.unstubAllGlobals();
 	}
 });

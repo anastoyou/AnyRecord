@@ -1,10 +1,10 @@
 import { FeedbackDialog } from "@/components/feedback/FeedbackDialog";
+import { BuyMeACoffeeButton } from "@/components/ui/BuyMeACoffeeButton";
+import { Button } from "@/components/ui/button";
+import { Cloud, File, GearSix, House, Plus, UserCircle } from "@/components/ui/icons";
+import { FolderRow } from "./FolderRow";
 import { RecordNewButton } from "./RecordNewButton";
 import { SidebarCards } from "./SidebarCards";
-import { FolderRow } from "./FolderRow";
-import { Cloud, File, GearSix, House, Plus, UserCircle } from "@/components/ui/icons";
-
-import { Button } from "@/components/ui/button";
 
 import type { DashboardProps } from "./types";
 
@@ -134,8 +134,12 @@ export function DashboardSidebar({
 						/>
 					))}
 				</div>
-				<div className="space-y-1 pt-6">
+				<div className="space-y-1.5 pt-6">
 					<SidebarCards />
+					<BuyMeACoffeeButton
+						className="w-full justify-start rounded-xl px-3 py-2 text-xs font-semibold"
+						size="sm"
+					/>
 					<FeedbackDialog showLabel className={navClass(false)} onSignIn={onSignIn} />
 					<Button
 						variant="ghost"

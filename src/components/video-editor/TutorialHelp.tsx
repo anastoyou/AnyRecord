@@ -1,11 +1,5 @@
-import {
-	ArrowRight,
-	Question as HelpCircle,
-	Keyboard,
-	Scissors,
-	GearSix as Settings2,
-} from "@/components/ui/icons";
 import { useEffect, useState } from "react";
+import { BuyMeACoffeeButton } from "@/components/ui/BuyMeACoffeeButton";
 import { Button } from "@/components/ui/button";
 import {
 	Dialog,
@@ -15,11 +9,18 @@ import {
 	DialogTitle,
 	DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+	ArrowRight,
+	Question as HelpCircle,
+	Keyboard,
+	Scissors,
+	GearSix as Settings2,
+} from "@/components/ui/icons";
+import { toast } from "@/components/ui/toast";
 import { useScopedT } from "@/contexts/I18nContext";
 import { useShortcuts } from "@/contexts/ShortcutsContext";
 import { formatBinding, SHORTCUT_ACTIONS, SHORTCUT_LABELS } from "@/lib/shortcuts";
 import { formatShortcut } from "@/utils/platformUtils";
-import { toast } from "@/components/ui/toast";
 
 export const ANYRECORD_ISSUES_URL = "https://github.com/anastoyou/AnyRecord/issues";
 // Set to your community invite link to show the Discord button.
@@ -165,7 +166,8 @@ export function KeyboardShortcutsDialog({
 							</div>
 						</div>
 					</div>
-					<div className="flex justify-end">
+					<div className="flex items-center justify-between pt-2">
+						<BuyMeACoffeeButton size="sm" />
 						<Button type="button" variant="outline" onClick={openConfig}>
 							<Settings2 className="h-4 w-4" />
 							{t("keyboardShortcuts.customize")}

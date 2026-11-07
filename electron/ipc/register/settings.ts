@@ -1,7 +1,7 @@
-import { createCountdownController } from "../../countdownController";
 import fs from "node:fs/promises";
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, clipboard, ipcMain } from "electron";
 import { hasAppSetting, readAppSettingsStore, writeAppSettingsStore } from "../../appSettingsStore";
+import { createCountdownController } from "../../countdownController";
 import { hideCursor } from "../../cursorHider";
 import { createCountdownWindow } from "../../windows";
 import { COUNTDOWN_SETTINGS_FILE, RECORDINGS_SETTINGS_FILE, SHORTCUTS_FILE } from "../constants";
@@ -40,6 +40,13 @@ function getBrowserMicrophoneProfileFromEnv() {
 }
 
 export function registerSettingsHandlers() {
+	ipcMain.handle("clipboard:writeText", (_event, text: unknown) => {
+		if (typeof text === "string") {
+			clipboard.writeText(text);
+			return true;
+		}
+		return false;
+	});
 	ipcMain.handle(
 		"get-window-fullscreen",
 		(event) => BrowserWindow.fromWebContents(event.sender)?.isFullScreen() ?? false,

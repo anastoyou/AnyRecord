@@ -903,6 +903,7 @@ interface Window {
 				thumbnailPath: string | null;
 				isCurrent: boolean;
 				isInProjectsDirectory: boolean;
+				projectId?: string;
 			}>;
 			error?: string;
 		}>;
@@ -1007,24 +1008,218 @@ interface Window {
 				totalBytes: number;
 			}) => void,
 		) => () => void;
+		cloudinaryGetStatus: (input?: { authToken?: string | null }) => Promise<{
+			success: boolean;
+			userId?: string;
+			status?: {
+				connected: boolean;
+				state: "not_connected" | "connected" | "disconnected" | "revoked" | "error";
+				cloudName?: string | null;
+				accountLabel?: string | null;
+				accountSub?: string | null;
+				scopes?: string[];
+				connectedAt?: string | null;
+				lastError?: string | null;
+			};
+			error?: string;
+		}>;
+		cloudinaryStartOAuth: (input?: {
+			authToken?: string | null;
+			loginHint?: string | null;
+		}) => Promise<{
+			success: boolean;
+			authorizationUrl?: string;
+			state?: string;
+			expiresAt?: string;
+			error?: string;
+		}>;
+		cloudinaryDisconnect: (input?: { authToken?: string | null }) => Promise<{
+			success: boolean;
+			status?: {
+				connected: boolean;
+				state: "not_connected" | "connected" | "disconnected" | "revoked" | "error";
+				cloudName?: string | null;
+				accountLabel?: string | null;
+				accountSub?: string | null;
+				scopes?: string[];
+				connectedAt?: string | null;
+				lastError?: string | null;
+			};
+			error?: string;
+		}>;
+		cloudinaryPickFiles: () => Promise<{
+			success: boolean;
+			canceled?: boolean;
+			files: Array<{
+				filePath: string;
+				fileName: string;
+				sizeBytes: number;
+				resourceType: "image" | "video" | null;
+			}>;
+			error?: string;
+		}>;
 		cloudinaryUpload: (input: {
 			filePath: string;
-			cloudName: string;
-			uploadPreset: string;
+			authToken?: string | null;
 			folder?: string;
 			title?: string;
 			uploadId?: string;
+			resourceType?: "image" | "video" | "auto";
 		}) => Promise<{
 			success: boolean;
 			uploadId?: string;
 			url?: string;
+			secureUrl?: string;
 			publicId?: string;
+			resourceType?: "image" | "video";
 			format?: string;
 			bytes?: number;
+			width?: number | null;
+			height?: number | null;
+			duration?: number | null;
+			originalFilename?: string | null;
+			media?: {
+				id: string;
+				userId: string;
+				cloudName: string;
+				publicId: string;
+				resourceType: "image" | "video";
+				secureUrl: string;
+				format: string | null;
+				bytes: number;
+				width: number | null;
+				height: number | null;
+				duration: number | null;
+				folder: string | null;
+				originalFilename: string | null;
+				createdAt: string;
+			};
 			canceled?: boolean;
 			error?: string;
 		}>;
 		cloudinaryCancel: (uploadId: string) => Promise<{ success: boolean }>;
+		cloudinaryListMedia: (input?: { authToken?: string | null; limit?: number }) => Promise<{
+			success: boolean;
+			media: Array<{
+				id: string;
+				userId: string;
+				cloudName: string;
+				publicId: string;
+				resourceType: "image" | "video";
+				secureUrl: string;
+				format: string | null;
+				bytes: number;
+				width: number | null;
+				height: number | null;
+				duration: number | null;
+				folder: string | null;
+				originalFilename: string | null;
+				createdAt: string;
+			}>;
+			error?: string;
+		}>;
+		cloudinaryDeleteMedia: (input: { authToken?: string | null; mediaId: string }) => Promise<{
+			success: boolean;
+			deleted?: boolean;
+			error?: string;
+		}>;
+		cloudinarySaveCloudProject: (input: {
+			authToken?: string | null;
+			projectId?: string;
+			name?: string;
+			projectData: unknown;
+			thumbnailDataUrl?: string | null;
+		}) => Promise<{
+			success: boolean;
+			project?: {
+				id: string;
+				userId: string;
+				projectId: string;
+				name: string;
+				videoUrl: string;
+				videoPublicId: string | null;
+				thumbnailUrl: string | null;
+				projectData: Record<string, unknown>;
+				createdAt: string;
+				updatedAt: string;
+			};
+			error?: string;
+		}>;
+		cloudinaryListCloudProjects: (input?: { authToken?: string | null }) => Promise<{
+			success: boolean;
+			projects: Array<{
+				id: string;
+				userId: string;
+				projectId: string;
+				name: string;
+				videoUrl: string;
+				videoPublicId: string | null;
+				thumbnailUrl: string | null;
+				projectData: Record<string, unknown>;
+				createdAt: string;
+				updatedAt: string;
+			}>;
+			error?: string;
+		}>;
+		cloudinaryDownloadCloudProject: (input: {
+			authToken?: string | null;
+			projectId: string;
+		}) => Promise<{
+			success: boolean;
+			localProjectPath?: string;
+			projectData?: unknown;
+			error?: string;
+		}>;
+		cloudinaryDeleteCloudProject: (input: {
+			authToken?: string | null;
+			projectId: string;
+		}) => Promise<{
+			success: boolean;
+			error?: string;
+		}>;
+		cloudinaryRenameCloudProject: (input: {
+			authToken?: string | null;
+			projectId: string;
+			name: string;
+		}) => Promise<{
+			success: boolean;
+			error?: string;
+		}>;
+		cloudinaryDownloadMedia: (input: { url: string; fileName?: string }) => Promise<{
+			success: boolean;
+			localPath?: string;
+			fileName?: string;
+			error?: string;
+		}>;
+		submitUserFeedback: (input: {
+			authToken?: string | null;
+			userEmail?: string | null;
+			userName?: string | null;
+			subject: string;
+			message: string;
+			category?: string | null;
+			diagnostics?: unknown;
+		}) => Promise<{
+			success: boolean;
+			feedbackId?: string;
+			createdAt?: string;
+			error?: string;
+		}>;
+		onCloudinaryStatusChanged: (
+			callback: (payload: {
+				status: {
+					connected: boolean;
+					state: "not_connected" | "connected" | "disconnected" | "revoked" | "error";
+					cloudName?: string | null;
+					accountLabel?: string | null;
+					accountSub?: string | null;
+					scopes?: string[];
+					connectedAt?: string | null;
+					lastError?: string | null;
+				};
+				error?: string | null;
+			}) => void,
+		) => () => void;
 		onCloudinaryProgress: (
 			callback: (progress: {
 				uploadId: string;
@@ -1101,6 +1296,7 @@ interface Window {
 		cancelCountdown: () => Promise<{ success: boolean }>;
 		getActiveCountdown: () => Promise<{ success: boolean; seconds: number | null }>;
 		onCountdownTick: (callback: (seconds: number) => void) => () => void;
+		copyToClipboard: (text: string) => Promise<boolean>;
 	};
 }
 

@@ -1,14 +1,5 @@
-import {
-	checkShareCapacity,
-	RECORDING_LIMIT_MESSAGE,
-	subscribeShareCapacityChanges,
-} from "./shareCapacity";
-import { SharedRecordings } from "./SharedRecordings";
-import { saveProjectShareLink } from "./projectShareLinks";
-import { useI18n } from "@/contexts/I18nContext";
-import { Check } from "@/components/ui/icons";
+import { Copy, Export, LinkSimple } from "@phosphor-icons/react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { toast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
 import {
 	Dialog,
@@ -17,10 +8,19 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
-import { Export, LinkSimple } from "@phosphor-icons/react";
+import { Check } from "@/components/ui/icons";
 import { Label } from "@/components/ui/label";
-
+import { toast } from "@/components/ui/toast";
+import { useI18n } from "@/contexts/I18nContext";
+import { copyTextToClipboard } from "@/utils/clipboard";
 import { CLOUD_SHARE_ENDPOINT as DEFAULT_CLOUD_ENDPOINT } from "./endpoint";
+import { saveProjectShareLink } from "./projectShareLinks";
+import { SharedRecordings } from "./SharedRecordings";
+import {
+	checkShareCapacity,
+	RECORDING_LIMIT_MESSAGE,
+	subscribeShareCapacityChanges,
+} from "./shareCapacity";
 
 type Props = {
 	projectPath?: string | null;
@@ -239,11 +239,11 @@ export function CloudShareButton({
 
 	const copyShareUrl = useCallback(async () => {
 		if (!shareUrl) return;
-		try {
-			await navigator.clipboard.writeText(shareUrl);
+		const success = await copyTextToClipboard(shareUrl);
+		if (success) {
 			setCopied(true);
 			toast.success(t("editor.cloud.linkCopied"));
-		} catch {
+		} else {
 			setCopied(false);
 			toast.error(t("editor.cloud.copyFailed"));
 		}
@@ -252,10 +252,47 @@ export function CloudShareButton({
 	const form = (
 		<>
 			{shareUrl ? (
-				<Button type="button" size="lg" onClick={copyShareUrl} className="w-full">
-					{copied ? <Check className="h-4 w-4" /> : <LinkSimple className="h-4 w-4" />}
-					{copied ? t("editor.cloud.copied") : "Copy link"}
-				</Button>
+				<div className="space-y-2">
+					<div className="flex items-center gap-2 rounded-lg border border-input bg-muted/30 px-3 py-1.5 focus-within:border-primary/50 transition-colors">
+						<input
+							type="text"
+							readOnly
+							value={shareUrl}
+							onClick={(e) => (e.target as HTMLInputElement).select()}
+							onFocus={(e) => (e.target as HTMLInputElement).select()}
+							className="min-w-0 flex-1 bg-transparent text-xs text-muted-foreground outline-none select-all"
+						/>
+						<Button
+							type="button"
+							variant="ghost"
+							size="sm"
+							onClick={() => void copyShareUrl()}
+							className="h-7 shrink-0 gap-1 px-2 text-xs"
+						>
+							{copied ? (
+								<>
+									<Check className="size-3.5 text-emerald-500" />
+									<span className="text-emerald-500">
+										{t("editor.cloud.copied")}
+									</span>
+								</>
+							) : (
+								<>
+									<Copy className="size-3.5" />
+									<span>{t("common.actions.copy", "Copy")}</span>
+								</>
+							)}
+						</Button>
+					</div>
+					<Button type="button" size="lg" onClick={copyShareUrl} className="w-full gap-2">
+						{copied ? (
+							<Check className="h-4 w-4 text-emerald-500" />
+						) : (
+							<LinkSimple className="h-4 w-4" />
+						)}
+						{copied ? t("editor.cloud.copied") : "Copy link"}
+					</Button>
+				</div>
 			) : (
 				<div className="space-y-4">
 					{!uploading && (

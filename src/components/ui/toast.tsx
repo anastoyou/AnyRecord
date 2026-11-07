@@ -1,5 +1,6 @@
-import { Toast, toast as heroToast } from "@heroui/react";
+import { toast as heroToast, Toast } from "@heroui/react";
 import { isValidElement, type ReactNode } from "react";
+import { copyTextToClipboard } from "@/utils/clipboard";
 
 type Options = {
 	id?: string | number;
@@ -44,13 +45,15 @@ function notify(title: ReactNode, options: Options = {}, variant: Variant = "def
 				? {
 						children: "Copy",
 						onPress: () => {
-							void navigator.clipboard.writeText(errorText).then(
-								() => heroToast.success("Error copied"),
-								() =>
+							void copyTextToClipboard(errorText).then((copied) => {
+								if (copied) {
+									heroToast.success("Error copied");
+								} else {
 									heroToast.danger("Could not copy error", {
 										description: errorText,
-									}),
-							);
+									});
+								}
+							});
 						},
 					}
 				: undefined,

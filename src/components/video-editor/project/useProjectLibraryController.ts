@@ -1,7 +1,8 @@
 /* biome-ignore-all lint/correctness/useExhaustiveDependencies: grouped editor domain objects contain the thumbnail renderer dependencies. */
 import { type RefObject, useCallback, useEffect, useRef } from "react";
-import { PROJECT_THUMBNAIL_WIDTH, PROJECT_THUMBNAIL_HEIGHT } from "@/lib/projectThumbnail";
 import { FrameRenderer } from "@/lib/exporter/frameRenderer";
+import { PROJECT_THUMBNAIL_HEIGHT, PROJECT_THUMBNAIL_WIDTH } from "@/lib/projectThumbnail";
+import type { ProjectLibraryEntry } from "../ProjectBrowserDialog";
 import { toFileUrl } from "../projectPersistence";
 import type { useAppearanceState } from "../state/useAppearanceState";
 import type { useProjectState } from "../state/useProjectState";
@@ -17,6 +18,7 @@ type Input = {
 	videoPlaybackRef: RefObject<VideoPlaybackRef | null>;
 	currentTime: number;
 	effectiveShowCursor: boolean;
+	authToken?: string;
 };
 
 export function useProjectLibraryController({
@@ -25,6 +27,7 @@ export function useProjectLibraryController({
 	timeline,
 	videoPlaybackRef,
 	effectiveShowCursor,
+	authToken,
 }: Input) {
 	const { setProjectLibraryEntries, setProjectLibraryLoading } = project;
 	const {
@@ -88,14 +91,88 @@ export function useProjectLibraryController({
 				throw new Error(result.error || "Failed to load project library");
 			}
 
-			setProjectLibraryEntries(
-				result.entries.map((entry) => {
-					const ready = thumbnailUpdates.current.get(entry.path);
-					return ready?.updatedAt === entry.updatedAt
-						? { ...entry, thumbnailPath: ready.thumbnailPath }
-						: entry;
-				}),
+			let cloudProjects: Array<{
+				id: string;
+				userId: string;
+				projectId: string;
+				name: string;
+				videoUrl: string;
+				videoPublicId: string | null;
+				thumbnailUrl: string | null;
+				projectData: Record<string, unknown>;
+				updatedAt: string;
+			}> = [];
+			const cloudProjectsById = new Map<string, (typeof cloudProjects)[number]>();
+			const cloudProjectsByName = new Map<string, (typeof cloudProjects)[number]>();
+
+			if (authToken && window.electronAPI.cloudinaryListCloudProjects) {
+				try {
+					const cloudResult = await window.electronAPI.cloudinaryListCloudProjects({
+						authToken,
+					});
+					if (cloudResult.success && cloudResult.projects) {
+						cloudProjects = cloudResult.projects;
+						for (const p of cloudProjects) {
+							if (p.projectId) {
+								cloudProjectsById.set(p.projectId, p);
+							}
+							if (p.name) {
+								cloudProjectsByName.set(p.name.trim().toLowerCase(), p);
+							}
+						}
+					}
+				} catch (cloudErr) {
+					console.warn("Unable to fetch cloud projects:", cloudErr);
+				}
+			}
+
+			const matchedCloudIds = new Set<string>();
+
+			const localEntries = result.entries.map((entry) => {
+				const ready = thumbnailUpdates.current.get(entry.path);
+				const thumbnailPath =
+					ready?.updatedAt === entry.updatedAt
+						? ready.thumbnailPath
+						: entry.thumbnailPath;
+
+				const matchedCloud =
+					(entry.projectId ? cloudProjectsById.get(entry.projectId) : undefined) ??
+					cloudProjectsByName.get(entry.name.trim().toLowerCase());
+
+				if (matchedCloud) {
+					matchedCloudIds.add(matchedCloud.projectId);
+					return {
+						...entry,
+						thumbnailPath: thumbnailPath || matchedCloud.thumbnailUrl || null,
+						isCloud: true,
+						cloudProjectId: matchedCloud.projectId,
+					};
+				}
+
+				return {
+					...entry,
+					thumbnailPath,
+				};
+			});
+
+			const remoteCloudEntries: ProjectLibraryEntry[] = cloudProjects
+				.filter((p) => !matchedCloudIds.has(p.projectId))
+				.map((p) => ({
+					name: p.name,
+					path: `cloud://${p.projectId}`,
+					updatedAt: new Date(p.updatedAt).getTime(),
+					thumbnailPath: p.thumbnailUrl || null,
+					isCurrent: false,
+					isInProjectsDirectory: false,
+					isCloud: true,
+					cloudProjectId: p.projectId,
+				}));
+
+			const combined = [...localEntries, ...remoteCloudEntries].sort(
+				(a, b) => (b.updatedAt || 0) - (a.updatedAt || 0),
 			);
+
+			setProjectLibraryEntries(combined);
 			const paths = new Set(result.entries.map((entry) => entry.path));
 			for (const key of thumbnailUpdates.current.keys()) {
 				if (!paths.has(key)) thumbnailUpdates.current.delete(key);
@@ -105,7 +182,7 @@ export function useProjectLibraryController({
 		} finally {
 			setProjectLibraryLoading(false);
 		}
-	}, []);
+	}, [authToken, setProjectLibraryEntries, setProjectLibraryLoading]);
 
 	useEffect(
 		() =>

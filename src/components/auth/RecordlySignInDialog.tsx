@@ -1,28 +1,21 @@
-import { ArrowRight, GithubLogo } from "@phosphor-icons/react";
-import { OnboardingPermissions } from "./OnboardingPermissions";
 import {
-	OnboardingBody,
-	OnboardingFooter,
-	OnboardingHeader,
-	OnboardingLayout,
-} from "./OnboardingLayout";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { useI18n } from "@/contexts/I18nContext";
-import { SignOut } from "@/components/ui/icons";
-import type { User } from "@supabase/supabase-js";
-import { Fragment, type FormEvent, useEffect, useState, useRef } from "react";
-import {
-	Modal,
+	Alert,
 	Button,
-	Form,
-	TextField,
-	Input,
-	Label,
 	Description,
 	FieldError,
+	Form,
+	Input,
+	Label,
+	Modal,
 	Separator,
-	Alert,
+	TextField,
 } from "@heroui/react";
+import { ArrowRight, GithubLogo } from "@phosphor-icons/react";
+import type { User } from "@supabase/supabase-js";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { type FormEvent, Fragment, useEffect, useRef, useState } from "react";
+import { SignOut } from "@/components/ui/icons";
+import { useI18n } from "@/contexts/I18nContext";
 import {
 	getEnabledSignInProviders,
 	type RecordlyOAuthProvider,
@@ -30,6 +23,13 @@ import {
 	signInWithSocial,
 	signOutRecordly,
 } from "@/lib/auth/recordlyAuth";
+import {
+	OnboardingBody,
+	OnboardingFooter,
+	OnboardingHeader,
+	OnboardingLayout,
+} from "./OnboardingLayout";
+import { OnboardingPermissions } from "./OnboardingPermissions";
 
 const MotionDialog = motion.create(Modal.Dialog);
 
@@ -54,12 +54,12 @@ function friendlyAuthError(
 	t: ReturnType<typeof useI18n>["t"],
 ): string {
 	const message = error instanceof Error ? error.message : String(error);
-	if (/unsupported provider|provider is not enabled/i.test(message)) {
+	if (/unsupported provider|provider is not enabled|not enabled/i.test(message)) {
 		if (action === "google") {
 			return t("editor.cloud.googleUnavailable");
 		}
-		if (action === "azure") return "Microsoft sign-in is not available yet.";
-		if (action === "github") return "GitHub sign-in is not available yet.";
+		if (action === "github")
+			return "GitHub sign-in is not configured yet in your Auth settings.";
 		return t("editor.cloud.providerUnavailable");
 	}
 	return message;
@@ -80,8 +80,7 @@ export function RecordlySignInDialog({
 	const awaitingSignIn = useRef(false);
 	const wide = onboarding || variant === "wide";
 	const [showPermissions, setShowPermissions] = useState(false);
-	const requiresSignIn = onboarding && !user;
-	const permissions = onboarding && Boolean(user) && showPermissions;
+	const permissions = onboarding && showPermissions;
 	const [email, setEmail] = useState("");
 	const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 	const [busy, setBusy] = useState<string>();
@@ -313,11 +312,6 @@ export function RecordlySignInDialog({
 												image: "google-logo.png",
 											},
 											{
-												provider: "azure",
-												label: "Microsoft",
-												image: "microsoft-logo.svg",
-											},
-											{
 												provider: "github",
 												label: "GitHub",
 												image: null,
@@ -437,9 +431,21 @@ export function RecordlySignInDialog({
 					)}
 				</div>
 			</SignInBody>
-			{onboarding && user && (
+			{onboarding && (
 				<OnboardingFooter>
-					<div className="flex w-full justify-end">
+					<div className="flex w-full items-center justify-between">
+						{!user ? (
+							<Button
+								variant="ghost"
+								isDisabled={disabled}
+								onPress={() => setShowPermissions(true)}
+								className="text-xs text-muted-foreground hover:text-foreground"
+							>
+								Continue as Guest
+							</Button>
+						) : (
+							<div />
+						)}
 						<Button
 							variant="primary"
 							isDisabled={disabled}
@@ -453,16 +459,8 @@ export function RecordlySignInDialog({
 		</motion.div>
 	);
 	return (
-		<Modal
-			isOpen={open}
-			onOpenChange={(value) => {
-				if (value || !requiresSignIn) onOpenChange(value);
-			}}
-		>
-			<Modal.Backdrop
-				isDismissable={!requiresSignIn}
-				isKeyboardDismissDisabled={requiresSignIn}
-			>
+		<Modal isOpen={open} onOpenChange={onOpenChange}>
+			<Modal.Backdrop isDismissable={true} isKeyboardDismissDisabled={false}>
 				<Modal.Container
 					size="cover"
 					placement="center"
@@ -484,9 +482,9 @@ export function RecordlySignInDialog({
 						{onboarding ? (
 							<OnboardingLayout
 								stage={permissions ? "permissions" : "account"}
-								canViewPermissions={Boolean(user)}
+								canViewPermissions={true}
 								onStageChange={(stage) =>
-									setShowPermissions(stage === "permissions" && Boolean(user))
+									setShowPermissions(stage === "permissions")
 								}
 							>
 								<AnimatePresence
@@ -507,9 +505,7 @@ export function RecordlySignInDialog({
 										{permissions ? (
 											<OnboardingPermissions
 												onBack={() => setShowPermissions(false)}
-												onFinish={() => {
-													if (user) onAuthenticated();
-												}}
+												onFinish={onAuthenticated}
 											/>
 										) : (
 											signInContent
@@ -535,12 +531,10 @@ export function RecordlySignInDialog({
 								{signInContent}
 							</>
 						)}
-						{!requiresSignIn && (
-							<Modal.CloseTrigger
-								aria-label={t("common.actions.close")}
-								className="z-20"
-							/>
-						)}
+						<Modal.CloseTrigger
+							aria-label={t("common.actions.close")}
+							className="z-20"
+						/>
 					</MotionDialog>
 				</Modal.Container>
 			</Modal.Backdrop>

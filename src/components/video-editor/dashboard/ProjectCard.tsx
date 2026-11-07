@@ -1,14 +1,14 @@
-import { Globe } from "@phosphor-icons/react";
-import { ProjectFolderChips } from "./ProjectFolderChips";
-import { RawThumbnail } from "./RawRecordings";
-import { AccountAvatar } from "@/components/ui/account-avatar";
 import { Dropdown } from "@heroui/react";
-import { Check, DotsThree, FolderSimple, Plus } from "@/components/ui/icons";
+import { Cloud, Globe } from "@phosphor-icons/react";
 import { useRef, useState } from "react";
+import { AccountAvatar } from "@/components/ui/account-avatar";
 import { Button } from "@/components/ui/button";
+import { Check, DotsThree, FolderSimple, Plus } from "@/components/ui/icons";
 import { getProjectShareLink, moveProjectShareLink } from "../cloud/projectShareLinks";
 import type { ProjectLibraryEntry } from "../ProjectBrowserDialog";
+import { ProjectFolderChips } from "./ProjectFolderChips";
 import { ProjectThumbnail } from "./ProjectThumbnail";
+import { RawThumbnail } from "./RawRecordings";
 import type { DashboardProps } from "./types";
 import type { DashboardModel } from "./useDashboardModel";
 
@@ -108,6 +108,15 @@ export function ProjectCard({
 						previewActive={!webUrl && hovering && !selecting && !busy}
 					/>
 				)}
+				{entry.isCloud && (
+					<span
+						title="Synced to Cloud"
+						className="pointer-events-none absolute left-2.5 top-2.5 z-10 flex items-center gap-1.5 rounded-full bg-slate-950/80 backdrop-blur-md px-2.5 py-1 text-[11px] font-medium text-sky-400 border border-sky-400/30 shadow-md"
+					>
+						<Cloud weight="fill" className="size-3.5 text-sky-400" />
+						<span>Cloud</span>
+					</span>
+				)}
 				{selecting && (
 					<span
 						className={`absolute right-2 top-2 flex size-5 items-center justify-center rounded-md ${selected.includes(entry.path) ? "bg-accent text-white" : "bg-background/90"}`}
@@ -159,6 +168,15 @@ export function ProjectCard({
 								day: "numeric",
 							})}
 						</p>
+						{entry.isCloud && (
+							<span
+								title="Synced to Cloud"
+								className="inline-flex items-center gap-1 rounded bg-sky-500/10 px-1.5 py-0.5 text-[10px] font-medium text-sky-600 dark:text-sky-400"
+							>
+								<Cloud weight="bold" className="size-3" />
+								Cloud
+							</span>
+						)}
 						{webUrl && (
 							<Globe
 								aria-label="Web project"
@@ -256,7 +274,9 @@ export function ProjectCard({
 										id="rename"
 										onAction={() => {
 											setName(entry.name);
-											requestAnimationFrame(() => requestAnimationFrame(() => setEditing(true)));
+											requestAnimationFrame(() =>
+												requestAnimationFrame(() => setEditing(true)),
+											);
 										}}
 									>
 										Rename

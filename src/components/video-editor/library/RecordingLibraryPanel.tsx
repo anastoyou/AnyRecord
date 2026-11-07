@@ -1,27 +1,34 @@
-import { RecordingThumbnail } from "./RecordingThumbnail";
+import { Checkbox, Dropdown, Button as HeroButton, Label, SearchField } from "@heroui/react";
+import { Cloud } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
-import { Checkbox, Label, Dropdown, SearchField, Button as HeroButton } from "@heroui/react";
+import { Button } from "@/components/ui/button";
 import {
-	FilmStrip,
-	Plus,
-	X,
-	Trash,
 	ArrowCounterClockwise,
 	DotsThree,
+	FilmStrip,
 	FolderOpen,
+	Plus,
+	Trash,
+	X,
 } from "@/components/ui/icons";
-import { Button } from "@/components/ui/button";
-import { RECORDING_DRAG_TYPE } from "@/types/recordingLibrary";
 import { cn } from "@/lib/utils";
+import { RECORDING_DRAG_TYPE } from "@/types/recordingLibrary";
+import { CloudMediaPickerDialog } from "../cloud/CloudMediaPickerDialog";
+import { RecordingThumbnail } from "./RecordingThumbnail";
 import type { useRecordingLibrary } from "./useRecordingLibrary";
 
 export function RecordingLibraryPanel({
 	library,
+	authToken,
+	accountId,
 }: {
 	library: ReturnType<typeof useRecordingLibrary>;
+	authToken?: string | null;
+	accountId?: string | null;
 }) {
 	const panelRef = useRef<HTMLElement>(null);
 	const [query, setQuery] = useState("");
+	const [cloudPickerOpen, setCloudPickerOpen] = useState(false);
 	// biome-ignore lint/correctness/useExhaustiveDependencies: restore focus when removal unmounts the focused recording.
 	useEffect(() => {
 		if (library.open) panelRef.current?.focus();
@@ -75,6 +82,16 @@ export function RecordingLibraryPanel({
 		>
 			<header className="flex min-h-14 shrink-0 items-center gap-2 px-5 py-3">
 				<h2 className="flex-1 text-[14px] font-semibold">Clips</h2>
+				<Button
+					variant="secondary"
+					size="sm"
+					className="h-8 gap-1.5 rounded-lg px-2 text-xs font-medium border border-border/40"
+					onClick={() => setCloudPickerOpen(true)}
+					title="Use Cloud Media from Cloudinary"
+				>
+					<Cloud weight="bold" className="size-3.5 text-sky-500" />
+					<span>Cloud Media</span>
+				</Button>
 				<Dropdown>
 					<HeroButton
 						isIconOnly
@@ -284,6 +301,16 @@ export function RecordingLibraryPanel({
 					</Button>
 				)}
 			</footer>
+			<CloudMediaPickerDialog
+				open={cloudPickerOpen}
+				onOpenChange={setCloudPickerOpen}
+				authToken={authToken}
+				accountId={accountId}
+				onSelectMedia={async (localPath) => {
+					await library.refresh();
+					await library.addToTimeline(localPath);
+				}}
+			/>
 		</section>
 	);
 }

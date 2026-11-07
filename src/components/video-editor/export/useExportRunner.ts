@@ -30,6 +30,7 @@ export function useExportRunner(input: ExportRunnerInput) {
 			settings: ExportSettings,
 			options?: { destination?: "download" | "share" },
 		): Promise<string | undefined> => {
+			let savedFinalPath: string | undefined;
 			const {
 				videoPath,
 				videoPlaybackRef,
@@ -201,9 +202,10 @@ export function useExportRunner(input: ExportRunnerInput) {
 							}
 							showExportSuccessToast(saveResult.path);
 							setExportedFilePath(saveResult.path);
+							savedFinalPath = saveResult.path;
 							if (smokeExportConfig.enabled) {
 								window.close();
-								return;
+								return saveResult.path;
 							}
 						} else {
 							setExportError(saveResult.message || "Failed to save GIF");
@@ -466,9 +468,10 @@ export function useExportRunner(input: ExportRunnerInput) {
 							}
 							showExportSuccessToast(saveResult.path);
 							setExportedFilePath(saveResult.path);
+							savedFinalPath = saveResult.path;
 							if (smokeExportConfig.enabled) {
 								window.close();
-								return;
+								return saveResult.path;
 							}
 						} else {
 							if (smokeExportConfig.enabled) {
@@ -533,6 +536,7 @@ export function useExportRunner(input: ExportRunnerInput) {
 				} else {
 					video.currentTime = restoreTime;
 				}
+				return savedFinalPath;
 			} catch (error) {
 				if (exportWasCancelled()) return;
 				console.error("Export error:", error);

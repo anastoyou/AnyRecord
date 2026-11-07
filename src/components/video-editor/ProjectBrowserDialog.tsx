@@ -1,4 +1,5 @@
 import { Card, Popover } from "@heroui/react";
+import { Cloud } from "@phosphor-icons/react";
 import { useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { toFileUrl } from "./projectPersistence";
@@ -12,6 +13,8 @@ export type ProjectLibraryEntry = {
 	thumbnailPath: string | null;
 	isCurrent: boolean;
 	isInProjectsDirectory: boolean;
+	isCloud?: boolean;
+	cloudProjectId?: string;
 };
 type ProjectBrowserDialogProps = {
 	open: boolean;
@@ -98,10 +101,18 @@ export default function ProjectBrowserDialog({
 								</div>
 								<span className="flex min-w-0 flex-1 flex-col gap-1 text-left">
 									<span className="truncate text-[13px]">{entry.name}</span>
-									<span className="text-[11px] text-muted">
-										{entry.isCurrent
-											? "Current project"
-											: new Date(entry.updatedAt).toLocaleDateString()}
+									<span className="flex items-center gap-2 text-[11px] text-muted">
+										<span>
+											{entry.isCurrent
+												? "Current project"
+												: new Date(entry.updatedAt).toLocaleDateString()}
+										</span>
+										{entry.isCloud && (
+											<span className="inline-flex items-center gap-1 font-medium text-sky-500">
+												<Cloud weight="bold" className="size-3" />
+												Cloud
+											</span>
+										)}
 									</span>
 								</span>
 							</Button>

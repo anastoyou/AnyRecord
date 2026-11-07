@@ -1,7 +1,7 @@
-import { moveProjectFolderReferences } from "../dashboard/useProjectFolders";
-import { moveProjectShareLink } from "../cloud/projectShareLinks";
 import { type RefObject, useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import { toast } from "@/components/ui/toast";
+import { moveProjectShareLink } from "../cloud/projectShareLinks";
+import { moveProjectFolderReferences } from "../dashboard/useProjectFolders";
 import { createProjectData, type EditorProjectData } from "../projectPersistence";
 import type { useProjectState } from "../state/useProjectState";
 import { cloneStructured, getErrorMessage } from "../videoEditorUtils";
@@ -29,6 +29,7 @@ type UseProjectSaveActionsInput = {
 	captureProjectThumbnail: () => Promise<string | null>;
 	refreshProjectLibrary: () => Promise<void>;
 	remountPreview: () => void;
+	authToken?: string;
 };
 
 export function useProjectSaveActions({
@@ -45,6 +46,7 @@ export function useProjectSaveActions({
 	captureProjectThumbnail,
 	refreshProjectLibrary,
 	remountPreview,
+	authToken,
 }: UseProjectSaveActionsInput) {
 	const {
 		currentProjectPath,
@@ -101,10 +103,10 @@ export function useProjectSaveActions({
 						currentProjectSnapshot?.videoPath === currentSourcePath
 							? currentProjectSnapshot
 							: createProjectData(
-									currentSourcePath,
-									currentPersistedEditorState,
-									lastSavedSnapshot?.projectId ?? null,
-								);
+								currentSourcePath,
+								currentPersistedEditorState,
+								lastSavedSnapshot?.projectId ?? null,
+							);
 					const fileNameBase =
 						currentSourcePath
 							.split(/[\\/]/)
@@ -120,11 +122,11 @@ export function useProjectSaveActions({
 					const result = !targetPath
 						? await window.electronAPI.createProjectFile(projectData, thumbnail)
 						: await window.electronAPI.saveProjectFile(
-								projectData,
-								fileNameBase,
-								targetPath,
-								thumbnail,
-							);
+							projectData,
+							fileNameBase,
+							targetPath,
+							thumbnail,
+						);
 					if (result.canceled) {
 						if (!options?.silent) toast.info("Project save canceled");
 						return false;
@@ -139,12 +141,14 @@ export function useProjectSaveActions({
 						activePathRef.current = result.path;
 						setCurrentProjectPath(result.path);
 					}
+					const effectiveCloudId = result.projectId ?? projectData.projectId ?? null;
+
 					setLastSavedSnapshot(
 						cloneStructured(
 							createProjectData(
 								projectData.videoPath,
 								projectData.editor,
-								result.projectId ?? projectData.projectId ?? null,
+								effectiveCloudId,
 							),
 						),
 					);
@@ -220,10 +224,10 @@ export function useProjectSaveActions({
 						currentProjectSnapshot?.videoPath === currentSourcePath
 							? currentProjectSnapshot
 							: createProjectData(
-									currentSourcePath,
-									currentPersistedEditorState,
-									lastSavedSnapshot?.projectId ?? null,
-								);
+								currentSourcePath,
+								currentPersistedEditorState,
+								lastSavedSnapshot?.projectId ?? null,
+							);
 					const previousPath = activePathRef.current;
 					const result = await window.electronAPI.saveProjectFileNamed(
 						projectData,
@@ -259,12 +263,26 @@ export function useProjectSaveActions({
 						activePathRef.current = result.path;
 						setCurrentProjectPath(result.path);
 					}
+					const effectiveCloudId = result.projectId ?? projectData.projectId ?? null;
+					if (
+						mode === "rename" &&
+						effectiveCloudId &&
+						authToken &&
+						window.electronAPI.cloudinaryRenameCloudProject
+					) {
+						void window.electronAPI.cloudinaryRenameCloudProject({
+							authToken,
+							projectId: effectiveCloudId,
+							name: trimmedName,
+						});
+					}
+
 					setLastSavedSnapshot(
 						cloneStructured(
 							createProjectData(
 								projectData.videoPath,
 								projectData.editor,
-								result.projectId ?? projectData.projectId ?? null,
+								effectiveCloudId,
 							),
 						),
 					);
@@ -288,6 +306,7 @@ export function useProjectSaveActions({
 			captureProjectThumbnail,
 			refreshProjectLibrary,
 			remountPreview,
+			authToken,
 		],
 	);
 

@@ -136,6 +136,20 @@ it("requests Microsoft's email scope and opens its OAuth URL externally", async 
 	expect(openExternalUrl).toHaveBeenCalledExactlyOnceWith("https://auth.example.test/oauth");
 });
 
+it("requests GitHub OAuth and opens its URL externally", async () => {
+	const openExternalUrl = vi.fn(async () => ({ success: true }));
+	vi.stubGlobal("window", { electronAPI: { openExternalUrl } });
+	const { signInWithSocial } = await import("./recordlyAuth");
+	await signInWithSocial("github");
+	expect(oauth).toHaveBeenCalledWith(
+		expect.objectContaining({
+			provider: "github",
+			options: expect.objectContaining({ skipBrowserRedirect: true }),
+		}),
+	);
+	expect(openExternalUrl).toHaveBeenCalledExactlyOnceWith("https://auth.example.test/oauth");
+});
+
 for (const dev of [true, false]) {
 	it(`requests an app-initiated email link with the ${dev ? "development" : "installed"} callback`, async () => {
 		vi.stubEnv("DEV", dev);

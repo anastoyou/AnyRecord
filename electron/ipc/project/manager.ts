@@ -1,13 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { createProjectFirstFrameThumbnail } from "./firstFrameThumbnail";
-import { buildMediaUrl, getMediaServerBaseUrl } from "../../mediaServer";
-import type { ProjectPreviewData } from "../../../src/types/projectPreview";
-import { hasFreshProjectThumbnail } from "./thumbnailFreshness";
-import { type Stats, existsSync, constants as fsConstants, realpathSync } from "node:fs";
+import { existsSync, constants as fsConstants, realpathSync, type Stats } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { app } from "electron";
+import type { ProjectPreviewData } from "../../../src/types/projectPreview";
 import { RECORDINGS_DIR, USER_DATA_PATH } from "../../appPaths";
+import { buildMediaUrl, getMediaServerBaseUrl } from "../../mediaServer";
 import { isSupportedLocalMediaPath } from "../../mediaTypes";
 import {
 	LEGACY_PROJECT_FILE_EXTENSIONS,
@@ -34,6 +32,8 @@ import {
 	normalizeVideoSourcePath,
 	parseJsonWithByteOrderMark,
 } from "../utils";
+import { createProjectFirstFrameThumbnail } from "./firstFrameThumbnail";
+import { hasFreshProjectThumbnail } from "./thumbnailFreshness";
 
 export { normalizePath, normalizeVideoSourcePath };
 
@@ -396,6 +396,17 @@ export async function buildProjectLibraryEntry(
 				.catch(() => undefined);
 		}
 
+		let projectId: string | undefined;
+		try {
+			const content = await fs.readFile(normalizedPath, "utf-8");
+			const parsed = JSON.parse(content);
+			if (typeof parsed?.projectId === "string" && parsed.projectId.trim()) {
+				projectId = parsed.projectId.trim();
+			}
+		} catch {
+			// Ignore read or JSON parse errors
+		}
+
 		return {
 			path: normalizedPath,
 			name: path
@@ -414,6 +425,7 @@ export async function buildProjectLibraryEntry(
 				currentProjectPath && normalizePath(currentProjectPath) === normalizedPath,
 			),
 			isInProjectsDirectory: path.dirname(normalizedPath) === normalizePath(projectsDir),
+			...(projectId ? { projectId } : {}),
 		};
 	} catch {
 		return null;

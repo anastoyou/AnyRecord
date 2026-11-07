@@ -22,6 +22,7 @@ export interface ExportPreferences {
 	gifSizePreset: GifSizePreset;
 	publishDestination: "link" | "local" | "cloudinary";
 	includeCaptionSidecar: boolean;
+	uploadToCloudinary?: boolean;
 }
 
 export function normalizeExportEncodingMode(value: unknown): ExportEncodingMode {
@@ -85,5 +86,6 @@ export function normalizeExportPreferences(raw: Partial<ExportPreferences>): Exp
 					? "cloudinary"
 					: "link",
 		includeCaptionSidecar: raw.includeCaptionSidecar === true,
+		uploadToCloudinary: raw.uploadToCloudinary === true,
 	};
 }

@@ -49,6 +49,28 @@ export function useRecordlyAuth() {
 			try {
 				setCallbackError(undefined);
 				await completeAuthCallback(url);
+				if (!recordlyAuth) return;
+				const { data } = await recordlyAuth.auth.getSession();
+				const session = data.session;
+				if (
+					session?.access_token &&
+					!session.user?.is_anonymous &&
+					window.electronAPI?.cloudinaryGetStatus &&
+					window.electronAPI?.cloudinaryStartOAuth
+				) {
+					const statusRes = await window.electronAPI.cloudinaryGetStatus({
+						authToken: session.access_token,
+					});
+					const isConnected = Boolean(
+						statusRes.status?.connected || statusRes.status?.state === "connected",
+					);
+					if (statusRes.success && !isConnected) {
+						void window.electronAPI.cloudinaryStartOAuth({
+							authToken: session.access_token,
+							loginHint: session.user?.email ?? null,
+						});
+					}
+				}
 			} catch (error) {
 				if (mounted)
 					setCallbackError(error instanceof Error ? error.message : String(error));

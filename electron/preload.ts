@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from "electron";
+import { clipboard, contextBridge, ipcRenderer } from "electron";
 import type { RecordingSessionData } from "./ipc/types";
 
 type NativeVideoExportWriteResult = { success: boolean; error?: string };
@@ -47,11 +47,11 @@ type NativeStaticLayoutChunkMetric = {
 	startSec: number;
 	durationSec: number;
 	backend:
-	| "cuda-overlay"
-	| "cuda-scale-cpu-pad"
-	| "cuda-static-composite"
-	| "nvidia-cuda-compositor"
-	| "windows-d3d11-compositor";
+		| "cuda-overlay"
+		| "cuda-scale-cpu-pad"
+		| "cuda-static-composite"
+		| "nvidia-cuda-compositor"
+		| "windows-d3d11-compositor";
 	elapsedMs: number;
 	outputBytes: number;
 	fallbackReason?: string;
@@ -416,22 +416,22 @@ contextBridge.exposeInMainWorld("electronAPI", {
 					result?.success
 						? { success: true }
 						: {
-							success: false,
-							error:
-								typeof result?.error === "string"
-									? result.error
-									: "Native video export session finished before all frame writes settled.",
-						},
+								success: false,
+								error:
+									typeof result?.error === "string"
+										? result.error
+										: "Native video export session finished before all frame writes settled.",
+							},
 				);
 
 				return result;
 			}) as Promise<{
-				success: boolean;
-				data?: Uint8Array;
-				encoderName?: string;
-				error?: string;
-				metrics?: NativeVideoAudioMuxMetrics;
-			}>;
+			success: boolean;
+			data?: Uint8Array;
+			encoderName?: string;
+			error?: string;
+			metrics?: NativeVideoAudioMuxMetrics;
+		}>;
 	},
 	nativeVideoExportCancel: (sessionId: string) => {
 		return ipcRenderer.invoke("native-video-export-cancel", sessionId).finally(() => {
@@ -1066,15 +1066,89 @@ contextBridge.exposeInMainWorld("electronAPI", {
 		ipcRenderer.on("cloud-share-progress", listener);
 		return () => ipcRenderer.removeListener("cloud-share-progress", listener);
 	},
+	cloudinaryGetStatus: (input?: { authToken?: string | null }) =>
+		ipcRenderer.invoke("cloudinary-status", input ?? {}),
+	cloudinaryStartOAuth: (input?: { authToken?: string | null; loginHint?: string | null }) =>
+		ipcRenderer.invoke("cloudinary-oauth-start", input ?? {}),
+	cloudinaryDisconnect: (input?: { authToken?: string | null }) =>
+		ipcRenderer.invoke("cloudinary-disconnect", input ?? {}),
+	cloudinaryPickFiles: () => ipcRenderer.invoke("cloudinary-pick-files"),
 	cloudinaryUpload: (input: {
 		filePath: string;
-		cloudName: string;
-		uploadPreset: string;
+		authToken?: string | null;
 		folder?: string;
 		title?: string;
 		uploadId?: string;
+		resourceType?: "image" | "video" | "auto";
 	}) => ipcRenderer.invoke("cloudinary-upload", input),
 	cloudinaryCancel: (uploadId: string) => ipcRenderer.invoke("cloudinary-cancel", uploadId),
+	cloudinaryListMedia: (input?: { authToken?: string | null; limit?: number }) =>
+		ipcRenderer.invoke("cloudinary-list-media", input ?? {}),
+	cloudinaryDeleteMedia: (input: { authToken?: string | null; mediaId: string }) =>
+		ipcRenderer.invoke("cloudinary-delete-media", input),
+	cloudinarySaveCloudProject: (input: {
+		authToken?: string | null;
+		projectId?: string;
+		name?: string;
+		projectData: unknown;
+		thumbnailDataUrl?: string | null;
+	}) => ipcRenderer.invoke("cloudinary-save-cloud-project", input),
+	cloudinaryListCloudProjects: (input?: { authToken?: string | null }) =>
+		ipcRenderer.invoke("cloudinary-list-cloud-projects", input ?? {}),
+	cloudinaryDownloadCloudProject: (input: { authToken?: string | null; projectId: string }) =>
+		ipcRenderer.invoke("cloudinary-download-cloud-project", input),
+	cloudinaryDeleteCloudProject: (input: { authToken?: string | null; projectId: string }) =>
+		ipcRenderer.invoke("cloudinary-delete-cloud-project", input),
+	cloudinaryRenameCloudProject: (input: {
+		authToken?: string | null;
+		projectId: string;
+		name: string;
+	}) => ipcRenderer.invoke("cloudinary-rename-cloud-project", input),
+	cloudinaryDownloadMedia: (input: { url: string; fileName?: string }) =>
+		ipcRenderer.invoke("cloudinary-download-media", input),
+	submitUserFeedback: (input: {
+		authToken?: string | null;
+		userEmail?: string | null;
+		userName?: string | null;
+		subject: string;
+		message: string;
+		category?: string | null;
+		diagnostics?: unknown;
+	}) => ipcRenderer.invoke("submit-user-feedback", input),
+	onCloudinaryStatusChanged: (
+		callback: (payload: {
+			status: {
+				connected: boolean;
+				state: "not_connected" | "connected" | "disconnected" | "revoked" | "error";
+				cloudName?: string | null;
+				accountLabel?: string | null;
+				accountSub?: string | null;
+				scopes?: string[];
+				connectedAt?: string | null;
+				lastError?: string | null;
+			};
+			error?: string | null;
+		}) => void,
+	) => {
+		const listener = (
+			_event: Electron.IpcRendererEvent,
+			payload: {
+				status: {
+					connected: boolean;
+					state: "not_connected" | "connected" | "disconnected" | "revoked" | "error";
+					cloudName?: string | null;
+					accountLabel?: string | null;
+					accountSub?: string | null;
+					scopes?: string[];
+					connectedAt?: string | null;
+					lastError?: string | null;
+				};
+				error?: string | null;
+			},
+		) => callback(payload);
+		ipcRenderer.on("cloudinary-status-changed", listener);
+		return () => ipcRenderer.removeListener("cloudinary-status-changed", listener);
+	},
 	onCloudinaryProgress: (
 		callback: (progress: {
 			uploadId: string;
@@ -1160,5 +1234,13 @@ contextBridge.exposeInMainWorld("electronAPI", {
 		const listener = (_event: Electron.IpcRendererEvent, seconds: number) => callback(seconds);
 		ipcRenderer.on("countdown-tick", listener);
 		return () => ipcRenderer.removeListener("countdown-tick", listener);
+	},
+	copyToClipboard: async (text: string): Promise<boolean> => {
+		try {
+			clipboard.writeText(text);
+			return true;
+		} catch {
+			return await ipcRenderer.invoke("clipboard:writeText", text);
+		}
 	},
 });

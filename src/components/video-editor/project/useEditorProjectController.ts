@@ -75,6 +75,7 @@ type Input = {
 		typeof useProjectLibraryController
 	>["captureProjectThumbnail"];
 	remountPreview: () => void;
+	authToken?: string;
 };
 
 export function useEditorProjectController(input: Input) {
@@ -191,6 +192,7 @@ export function useEditorProjectController(input: Input) {
 		captureProjectThumbnail: input.captureProjectThumbnail,
 		refreshProjectLibrary: input.refreshProjectLibrary,
 		remountPreview: input.remountPreview,
+		authToken: input.authToken,
 	});
 	const openActions = useProjectOpenActions({
 		project: input.project,
@@ -209,6 +211,7 @@ export function useEditorProjectController(input: Input) {
 		applySessionPresentation: input.applySessionPresentation,
 		handleSaveProject: saveActions.handleSaveProject,
 		handleSaveProjectAs: saveActions.handleSaveProjectAs,
+		authToken: input.authToken,
 	});
 
 	return {
@@ -219,5 +222,6 @@ export function useEditorProjectController(input: Input) {
 		saveActions,
 		openActions,
 		hasUnsavedChanges,
+		refreshProjectLibrary: input.refreshProjectLibrary,
 	};
 }

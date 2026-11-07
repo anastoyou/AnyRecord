@@ -1,6 +1,7 @@
-import { useRef, useState } from "react";
 import { Button, Description, Form, Input, Label, TextArea, TextField } from "@heroui/react";
+import { useRef, useState } from "react";
 import { useRecordlyAuth } from "@/components/auth/useRecordlyAuth";
+import { BuyMeACoffeeButton } from "@/components/ui/BuyMeACoffeeButton";
 import {
 	Dialog,
 	DialogContent,
@@ -20,21 +21,29 @@ export function FeedbackDialog({
 	className,
 	showLabel = true,
 	onSignIn,
+	authToken,
 }: {
 	className?: string;
 	showLabel?: boolean;
 	onSignIn?: () => void;
+	authToken?: string | null;
 }) {
 	const auth = useRecordlyAuth();
 	const [open, setOpen] = useState(false);
 	const [subject, setSubject] = useState("");
 	const [message, setMessage] = useState("");
+	const [guestEmail, setGuestEmail] = useState("");
 	const [files, setFiles] = useState<File[]>([]);
 	const [error, setError] = useState("");
 	const [sending, setSending] = useState(false);
 	const [sent, setSent] = useState(false);
 	const sendingRef = useRef(false);
 	const picker = useRef<HTMLInputElement>(null);
+
+	const canSubmitWithoutAuth =
+		typeof window !== "undefined" && Boolean(window.electronAPI?.submitUserFeedback);
+	const isAllowed = Boolean(auth.user || canSubmitWithoutAuth);
+
 	function addFiles(incoming: File[]) {
 		const next = [...files, ...incoming];
 		const issue = validateAttachments(next);
@@ -65,8 +74,19 @@ export function FeedbackDialog({
 					<DialogTitle>{sent ? "Thanks for your feedback" : "Send feedback"}</DialogTitle>
 				</DialogHeader>
 				{sent ? (
-					<Button onPress={() => setOpen(false)}>Done</Button>
-				) : !auth.user ? (
+					<div className="flex flex-col gap-4 text-center py-2">
+						<div className="rounded-xl bg-emerald-500/10 p-3 text-xs text-emerald-600 dark:text-emerald-400">
+							Your feedback has been saved. Thank you for helping improve AnyRecord!
+						</div>
+						<div className="flex flex-col items-center gap-2 pt-2 border-t border-border/40">
+							<p className="text-xs text-muted-foreground">
+								Want to support development?
+							</p>
+							<BuyMeACoffeeButton size="md" className="w-full justify-center" />
+						</div>
+						<Button onPress={() => setOpen(false)}>Done</Button>
+					</div>
+				) : !isAllowed ? (
 					<div className="flex flex-col gap-4">
 						<Description>Sign in to send feedback.</Description>
 						{onSignIn ? (
@@ -98,14 +118,18 @@ export function FeedbackDialog({
 							try {
 								await submitFeedback({
 									title: subject,
-									subject: "other",
+									subject: "general",
 									message,
 									files,
+									email: auth.user?.email || guestEmail || undefined,
+									userName: auth.user?.user_metadata?.full_name || undefined,
+									authToken,
 									logs: feedbackDiagnostics(),
 								});
 								setSent(true);
 								setSubject("");
 								setMessage("");
+								setGuestEmail("");
 								setFiles([]);
 							} catch (error) {
 								setError(feedbackErrorMessage(error));
@@ -211,6 +235,10 @@ export function FeedbackDialog({
 								{error}
 							</Description>
 						)}
+						<div className="flex items-center justify-between gap-2 border-t border-border/40 pt-2">
+							<span className="text-xs text-muted-foreground">Support creator</span>
+							<BuyMeACoffeeButton size="xs" />
+						</div>
 						<Button type="submit" isDisabled={sending} className="w-full">
 							{sending ? "Sending…" : "Send feedback"}
 						</Button>

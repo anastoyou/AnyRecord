@@ -27,6 +27,7 @@ export function ProjectThumbnail({
 		if (
 			!previewActive ||
 			!projectPath ||
+			projectPath.startsWith("cloud://") ||
 			window.matchMedia("(prefers-reduced-motion: reduce)").matches
 		)
 			return;

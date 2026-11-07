@@ -1,10 +1,11 @@
-import { SettingsSections, SettingsCategory } from "../SettingsSections";
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { SettingsRow } from "../SettingsRow";
-import { Switch } from "@/components/ui/switch";
-import { supportsHudCaptureProtection } from "@/lib/hudCaptureProtection";
+import { createContext, type ReactNode, useContext, useEffect, useState } from "react";
+import { BuyMeACoffeeButton } from "@/components/ui/BuyMeACoffeeButton";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "@/components/ui/toast";
+import { supportsHudCaptureProtection } from "@/lib/hudCaptureProtection";
+import { SettingsRow } from "../SettingsRow";
+import { SettingsCategory, SettingsSections } from "../SettingsSections";
 export const DashboardSettingsContext = createContext<ReactNode>(null);
 export function DashboardSettings({ onImportFile }: { onImportFile: () => Promise<void> }) {
 	const settingsContent = useContext(DashboardSettingsContext);
@@ -59,6 +60,14 @@ export function DashboardSettings({ onImportFile }: { onImportFile: () => Promis
 					category={["general", "account", "permissions", "motion", "advanced"]}
 				>
 					{settingsContent}
+				</SettingsCategory>
+				<SettingsCategory category="general">
+					<SettingsRow
+						title="Buy Me a Coffee"
+						description="Support the ongoing development and maintenance of AnyRecord."
+					>
+						<BuyMeACoffeeButton size="sm" />
+					</SettingsRow>
 				</SettingsCategory>
 				<SettingsCategory category="files">
 					<SettingsRow title="Open video or project">

@@ -1,22 +1,22 @@
-import { OnboardingController } from "@/components/auth/OnboardingController";
-import { AccountProfileContext } from "@/components/ui/account-avatar";
-import { DashboardSettingsContext } from "../dashboard/DashboardSettings";
-import { AnyRecordSignInDialog, type SignInReason } from "@/components/auth/AnyRecordSignInDialog";
-import { useAnyRecordAuth } from "@/components/auth/useAnyRecordAuth";
-import { useVideoSourceRecovery } from "../hooks/useVideoSourceRecovery";
-import { useRecordingLibrary } from "../library/useRecordingLibrary";
-import { RecordingLibraryPanel } from "../library/RecordingLibraryPanel";
-import { RECORDING_DRAG_TYPE } from "@/types/recordingLibrary";
-import { Button } from "@/components/ui/button";
-import { useCallback, useMemo, useEffect, useRef, useState, type ComponentProps } from "react";
+import { type ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { EditorAnnouncementBanner } from "@/components/announcements/EditorAnnouncementBanner";
+import { AnyRecordSignInDialog, type SignInReason } from "@/components/auth/AnyRecordSignInDialog";
+import { OnboardingController } from "@/components/auth/OnboardingController";
+import { useAnyRecordAuth } from "@/components/auth/useAnyRecordAuth";
+import { AccountProfileContext } from "@/components/ui/account-avatar";
+import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/toast";
 import type { useI18n } from "@/contexts/I18nContext";
+import { RECORDING_DRAG_TYPE } from "@/types/recordingLibrary";
+import { DashboardSettingsContext } from "../dashboard/DashboardSettings";
 import type { useEditorExportController } from "../export/useEditorExportController";
 import type { useExportDimensions } from "../export/useExportDimensions";
 import type { useExportSession } from "../export/useExportSession";
 import type { useExportSettings } from "../export/useExportSettings";
 import type { useTimelineEditingController } from "../hooks/useTimelineEditingController";
+import { useVideoSourceRecovery } from "../hooks/useVideoSourceRecovery";
+import { RecordingLibraryPanel } from "../library/RecordingLibraryPanel";
+import { useRecordingLibrary } from "../library/useRecordingLibrary";
 import type { useVideoEditorPresets } from "../presets/useVideoEditorPresets";
 import type { useEditorProjectController } from "../project/useEditorProjectController";
 import { SettingsPanel } from "../SettingsPanel";
@@ -26,8 +26,8 @@ import type { useProjectState } from "../state/useProjectState";
 import type { useTimelineState } from "../state/useTimelineState";
 import { CropEditorDialog } from "./CropEditorDialog";
 import { EditorDialogs } from "./EditorDialogs";
-import { EditorLoadingSkeleton } from "./EditorLoadingSkeleton";
 import { EditorHeader } from "./EditorHeader";
+import { EditorLoadingSkeleton } from "./EditorLoadingSkeleton";
 import { EditorPreviewPanel } from "./EditorPreviewPanel";
 import { EditorSidebar } from "./EditorSidebar";
 import { EditorTimelinePanel } from "./EditorTimelinePanel";
@@ -53,6 +53,7 @@ type Props = {
 	setExperimentalNvidiaCudaExport: (enabled: boolean) => void;
 	effectiveShowCursor: boolean;
 	previewAspectRatioValue: number;
+	captureProjectThumbnail?: () => Promise<string | null>;
 };
 
 export function EditorShell(props: Props) {
@@ -191,8 +192,7 @@ export function EditorShell(props: Props) {
 						)
 							return;
 						project.setProjectBrowserOpen(false);
-						if (!auth.user) requestSignIn("share");
-						else setShareRequestNonce((value) => value + 1);
+						setShareRequestNonce((value) => value + 1);
 					}}
 					accountLabel={auth.user?.email}
 					authToken={auth.accessToken}
@@ -288,12 +288,18 @@ export function EditorShell(props: Props) {
 				handleRetrySaveExport={dialogActions.handleRetrySaveExport}
 				handleStartExportFromDropdown={dialogActions.handleStartExportFromDropdown}
 				prepareExportForShare={dialogActions.prepareExportForShare}
+				prepareExportForCloudinary={dialogActions.prepareExportForCloudinary}
 				onRequestShareSignIn={() => requestSignIn("share")}
 				shareRequestNonce={shareRequestNonce}
 				authToken={auth.accessToken}
 				accountId={auth.user?.id}
 				revealExportedFile={dialogActions.revealExportedFile}
 				exportMessage={exportMessage}
+				currentProjectSnapshot={lifecycle.currentProjectSnapshot}
+				currentSourcePath={snapshot.currentSourcePath}
+				captureThumbnail={props.captureProjectThumbnail}
+				saveLocalProject={saveActions.handleSaveProject}
+				refreshProjectLibrary={projectController.refreshProjectLibrary}
 			/>
 			<EditorAnnouncementBanner />
 			<div
@@ -347,7 +353,13 @@ export function EditorShell(props: Props) {
 						accountUser={auth.user}
 						onAccountClick={() => requestSignIn("account")}
 						panelContent={
-							library.open ? <RecordingLibraryPanel library={library} /> : undefined
+							library.open ? (
+								<RecordingLibraryPanel
+									library={library}
+									authToken={auth.accessToken}
+									accountId={auth.user?.id}
+								/>
+							) : undefined
 						}
 						t={t}
 						activeSection={ui.activeEffectSection}

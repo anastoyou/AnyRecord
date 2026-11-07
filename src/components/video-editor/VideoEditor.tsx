@@ -1,5 +1,6 @@
 /* biome-ignore-all lint/correctness/useExhaustiveDependencies: setters returned by the editor's domain-state hooks are stable React dispatchers. */
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useAnyRecordAuth } from "@/components/auth/useAnyRecordAuth";
 import { useI18n } from "@/contexts/I18nContext";
 import { useShortcuts } from "@/contexts/ShortcutsContext";
 import { getAspectRatioValue } from "@/utils/aspectRatioUtils";
@@ -8,10 +9,10 @@ import { useEditorExportController } from "./export/useEditorExportController";
 import { useExportDimensions } from "./export/useExportDimensions";
 import { useExportSession } from "./export/useExportSession";
 import { useExportSettings } from "./export/useExportSettings";
+import { useGestureController } from "./gestures/useGestureController";
 import { useTimelineEditingController } from "./hooks/useTimelineEditingController";
 import { EditorShell } from "./layout/EditorShell";
 import { useEditorSettingsPanelProps } from "./layout/useEditorSettingsPanelProps";
-import { useGestureController } from "./gestures/useGestureController";
 import { useVideoEditorPresets } from "./presets/useVideoEditorPresets";
 import { useEditorProjectController } from "./project/useEditorProjectController";
 import { useProjectLibraryController } from "./project/useProjectLibraryController";
@@ -24,6 +25,7 @@ import { useNvidiaCudaExportOptIn } from "./useNvidiaCudaExportOptIn";
 
 export default function VideoEditor() {
 	const { t } = useI18n();
+	const auth = useAnyRecordAuth();
 	const smokeExportConfig = useMemo(
 		() => getSmokeExportConfig(typeof window === "undefined" ? "" : window.location.search),
 		[],
@@ -173,6 +175,7 @@ export default function VideoEditor() {
 		videoPlaybackRef,
 		currentTime,
 		effectiveShowCursor,
+		authToken: auth.accessToken,
 	});
 	const handleShowCursorChange = useCallback((nextShowCursor: boolean) => {
 		setSessionShowCursorOverride(null);
@@ -261,6 +264,7 @@ export default function VideoEditor() {
 		refreshProjectLibrary,
 		captureProjectThumbnail,
 		remountPreview,
+		authToken: auth.accessToken,
 	});
 	const {
 		snapshot: { currentSourcePath },
@@ -422,6 +426,7 @@ export default function VideoEditor() {
 			setExperimentalNvidiaCudaExport={setExperimentalNvidiaCudaExport}
 			effectiveShowCursor={effectiveShowCursor}
 			previewAspectRatioValue={previewAspectRatioValue}
+			captureProjectThumbnail={captureProjectThumbnail}
 		/>
 	);
 }

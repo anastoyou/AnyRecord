@@ -6,13 +6,13 @@ import {
 	useCallback,
 	useEffect,
 } from "react";
-import type { useProjectSaveActions } from "./useProjectSaveActions";
 import { toast } from "@/components/ui/toast";
 import { fromFileUrl, resolveVideoUrl } from "../projectPersistence";
 import type { useAppearanceState } from "../state/useAppearanceState";
 import type { useProjectState } from "../state/useProjectState";
 import { DEFAULT_WEBCAM_TIME_OFFSET_MS } from "../types";
 import type { VideoPlaybackRef } from "../VideoPlayback";
+import type { useProjectSaveActions } from "./useProjectSaveActions";
 
 type Set<T> = Dispatch<SetStateAction<T>>;
 
@@ -33,6 +33,7 @@ type UseProjectOpenActionsInput = {
 	applySessionPresentation: (session: null) => void;
 	handleSaveProject: () => Promise<unknown>;
 	handleSaveProjectAs: () => Promise<unknown>;
+	authToken?: string;
 };
 
 export function useProjectOpenActions({
@@ -51,6 +52,7 @@ export function useProjectOpenActions({
 	applySessionPresentation,
 	handleSaveProject,
 	handleSaveProjectAs,
+	authToken,
 }: UseProjectOpenActionsInput) {
 	const confirmReplaceSourceWithUnsavedChanges = useCallback(
 		async (_actionLabel: string) => {
@@ -61,10 +63,23 @@ export function useProjectOpenActions({
 	);
 
 	const handleOpenProjectFromLibrary = useCallback(
-		async (projectPath: string) => {
+		async (targetProjectPath: string) => {
 			if (!(await confirmReplaceSourceWithUnsavedChanges("open another project"))) return;
 			try {
-				const result = await window.electronAPI.openProjectFileAtPath(projectPath);
+				let resolvedPath = targetProjectPath;
+				if (resolvedPath.startsWith("cloud://")) {
+					const projectId = resolvedPath.slice("cloud://".length);
+					toast.info("Downloading cloud project and media...");
+					const dlResult = await window.electronAPI.cloudinaryDownloadCloudProject({
+						authToken,
+						projectId,
+					});
+					if (!dlResult.success || !dlResult.localProjectPath) {
+						throw new Error(dlResult.error || "Failed to download cloud project");
+					}
+					resolvedPath = dlResult.localProjectPath;
+				}
+				const result = await window.electronAPI.openProjectFileAtPath(resolvedPath);
 				if (result.canceled) return;
 				if (!result.success) {
 					project.setError(result.error || result.message || "Failed to load project");
@@ -85,6 +100,7 @@ export function useProjectOpenActions({
 		},
 		[
 			applyLoadedProject,
+			authToken,
 			confirmReplaceSourceWithUnsavedChanges,
 			project,
 			refreshProjectLibrary,
@@ -226,27 +242,88 @@ export function useProjectOpenActions({
 
 	const handleDeleteProjects = useCallback(
 		async (paths: string[]) => {
-			const result = await window.electronAPI.trashProjectFiles(paths);
-			if (project.currentProjectPath && result.deleted.includes(project.currentProjectPath)) {
-				project.setCurrentProjectPath(null);
-				project.setLastSavedSnapshot(null);
+			const cloudPaths = paths.filter((p) => p.startsWith("cloud://"));
+			const localPaths = paths.filter((p) => !p.startsWith("cloud://"));
+			const deleted: string[] = [];
+
+			if (
+				cloudPaths.length > 0 &&
+				authToken &&
+				window.electronAPI.cloudinaryDeleteCloudProject
+			) {
+				for (const cp of cloudPaths) {
+					const projectId = cp.replace("cloud://", "");
+					try {
+						const res = await window.electronAPI.cloudinaryDeleteCloudProject({
+							authToken,
+							projectId,
+						});
+						if (res.success) {
+							deleted.push(cp);
+						}
+					} catch (e) {
+						console.warn("Failed to delete cloud project", e);
+					}
+				}
 			}
+
+			if (localPaths.length > 0) {
+				const result = await window.electronAPI.trashProjectFiles(localPaths);
+				deleted.push(...result.deleted);
+				if (
+					project.currentProjectPath &&
+					result.deleted.includes(project.currentProjectPath)
+				) {
+					project.setCurrentProjectPath(null);
+					project.setLastSavedSnapshot(null);
+				}
+				if (result.errors.length) toast.error(result.errors.join("\n"));
+			}
+
 			await refreshProjectLibrary();
-			if (result.errors.length) toast.error(result.errors.join("\n"));
-			return result.deleted;
+			return deleted;
 		},
-		[project, refreshProjectLibrary],
+		[authToken, project, refreshProjectLibrary],
 	);
 	const handleRenameLibraryProject = useCallback(
 		async (path: string, name: string) => {
-			const result = await window.electronAPI.renameLibraryProject(path, name);
-			if (!result.success || !result.path)
-				throw new Error(result.error || "Could not rename project");
-			if (project.currentProjectPath === path) project.setCurrentProjectPath(result.path);
+			let newPath = path;
+			if (path.startsWith("cloud://")) {
+				const projectId = path.replace("cloud://", "");
+				if (authToken && window.electronAPI.cloudinaryRenameCloudProject) {
+					const res = await window.electronAPI.cloudinaryRenameCloudProject({
+						authToken,
+						projectId,
+						name,
+					});
+					if (!res.success) {
+						throw new Error(res.error || "Could not rename cloud project");
+					}
+				}
+			} else {
+				const result = await window.electronAPI.renameLibraryProject(path, name);
+				if (!result.success || !result.path)
+					throw new Error(result.error || "Could not rename project");
+				newPath = result.path;
+				if (project.currentProjectPath === path) project.setCurrentProjectPath(result.path);
+
+				const matchedEntry = project.projectLibraryEntries.find((e) => e.path === path);
+				if (
+					matchedEntry?.cloudProjectId &&
+					authToken &&
+					window.electronAPI.cloudinaryRenameCloudProject
+				) {
+					void window.electronAPI.cloudinaryRenameCloudProject({
+						authToken,
+						projectId: matchedEntry.cloudProjectId,
+						name,
+					});
+				}
+			}
 			await refreshProjectLibrary();
-			return result.path;
+			return newPath;
 		},
-		[project, refreshProjectLibrary],
+		[authToken, project, refreshProjectLibrary],
 	);
 
 	return {

@@ -1,7 +1,8 @@
-import { DownloadSimple as Download, FilmSlate as Film, Image } from "@/components/ui/icons";
-import { Card, Label, Description, TagGroup, Tag } from "@heroui/react";
+import { Card, Description, Label, Tag, TagGroup } from "@heroui/react";
+import { CloudArrowUp } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
+import { DownloadSimple as Download, FilmSlate as Film, Image } from "@/components/ui/icons";
 import { Switch } from "@/components/ui/switch";
 import { useScopedT } from "@/contexts/I18nContext";
 import type {
@@ -31,6 +32,9 @@ interface ExportSettingsMenuProps {
 	showCaptionSidecarOption?: boolean;
 	includeCaptionSidecar?: boolean;
 	onIncludeCaptionSidecarChange?: (enabled: boolean) => void;
+	showCloudinaryOption?: boolean;
+	uploadToCloudinary?: boolean;
+	onUploadToCloudinaryChange?: (enabled: boolean) => void;
 	mp4OutputDimensions?: Record<ExportQuality, { width: number; height: number }>;
 	gifFrameRate: GifFrameRate;
 	onGifFrameRateChange?: (rate: GifFrameRate) => void;
@@ -112,6 +116,9 @@ export function ExportSettingsMenu({
 	showCaptionSidecarOption = false,
 	includeCaptionSidecar = false,
 	onIncludeCaptionSidecarChange,
+	showCloudinaryOption = false,
+	uploadToCloudinary = false,
+	onUploadToCloudinaryChange,
 	mp4OutputDimensions,
 	gifFrameRate,
 	onGifFrameRateChange,
@@ -264,6 +271,25 @@ export function ExportSettingsMenu({
 							<Label>{tSettings("export.loop")}</Label>
 						</Switch>
 					</>
+				)}
+				{showCloudinaryOption && (
+					<div>
+						<Switch
+							checked={uploadToCloudinary}
+							onCheckedChange={onUploadToCloudinaryChange}
+						>
+							<Label className="flex items-center gap-1.5">
+								<CloudArrowUp className="size-4 text-sky-500" />
+								{tSettings("export.cloudinary.title", "Upload to Cloudinary")}
+							</Label>
+						</Switch>
+						<Description>
+							{tSettings(
+								"export.cloudinary.hint",
+								"Also upload a copy to your Cloudinary library after export.",
+							)}
+						</Description>
+					</div>
 				)}
 			</Card.Content>
 			{!hideAction && (

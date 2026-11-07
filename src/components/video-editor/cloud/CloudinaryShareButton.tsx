@@ -1,72 +1,67 @@
-import {
-	ArrowSquareOut,
-	Check,
-	CheckCircle,
-	CloudArrowUp,
-	Copy,
-	Gear,
-	XCircle,
-} from "@phosphor-icons/react";
+import { ProgressBar } from "@heroui/react";
+import { CloudArrowUp, Copy, LinkSimple } from "@phosphor-icons/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Check } from "@/components/ui/icons";
 import { toast } from "@/components/ui/toast";
-import { type CloudinaryConfig, loadCloudinaryConfig } from "@/lib/cloudinary/cloudinaryConfig";
-import { CloudinaryConnectDialog } from "./CloudinaryConnectDialog";
+import {
+	type CloudinaryUploadItem,
+	useCloudinaryConnection,
+} from "@/lib/cloudinary/useCloudinaryConnection";
+import { copyTextToClipboard } from "@/utils/clipboard";
 
 type Props = {
 	projectPath?: string | null;
 	projectTitle: string;
+	exportFormat?: "mp4" | "gif";
 	prepareFile?: () => Promise<string | undefined>;
 	preparationProgress?: number;
 	onCancelPrepare?: () => void;
 	onBusyChange?: (busy: boolean) => void;
+	authToken?: string;
+	accountId?: string;
+	onRequestSignIn?: () => void;
 };
 
 export function CloudinaryShareButton({
 	projectTitle,
+	exportFormat = "mp4",
 	prepareFile,
 	preparationProgress = 0,
 	onCancelPrepare,
 	onBusyChange,
+	authToken,
+	accountId,
+	onRequestSignIn,
 }: Props) {
-	const [config, setConfig] = useState<CloudinaryConfig | null>(null);
-	const [connectDialogOpen, setConnectDialogOpen] = useState(false);
+	const {
+		uiState,
+		account,
+		loadingStatus,
+		isConnecting,
+		isUploading,
+		overallUploadProgress,
+		errorMessage,
+		setErrorMessage,
+		uploadItems,
+		connect,
+		cancelConnect,
+		disconnect,
+		uploadFiles,
+		pickAndUploadFiles,
+		cancelUpload,
+	} = useCloudinaryConnection({ authToken, accountId });
 
-	const [phase, setPhase] = useState<"idle" | "preparing" | "uploading" | "done">("idle");
-	const [progress, setProgress] = useState(0);
-	const [uploadUrl, setUploadUrl] = useState<string | null>(null);
-	const [error, setError] = useState<string | null>(null);
+	const [preparingRecording, setPreparingRecording] = useState(false);
 	const [copied, setCopied] = useState(false);
+	const [lastUploadedItem, setLastUploadedItem] = useState<CloudinaryUploadItem | null>(null);
 
-	const activeUploadId = useRef<string | undefined>(undefined);
 	const preparedFileRef = useRef<string | undefined>(undefined);
 
-	useEffect(() => {
-		setConfig(loadCloudinaryConfig());
-	}, []);
-
-	const isBusy = phase === "preparing" || phase === "uploading";
+	const isBusy = preparingRecording || isUploading;
 	useEffect(() => {
 		onBusyChange?.(isBusy);
 	}, [isBusy, onBusyChange]);
-
-	// Track preparation progress (0% -> 60%)
-	useEffect(() => {
-		if (phase === "preparing" && Number.isFinite(preparationProgress)) {
-			setProgress(Math.max(5, Math.min(60, Math.round(preparationProgress * 0.6))));
-		}
-	}, [phase, preparationProgress]);
-
-	// Listen to Electron Cloudinary upload progress (60% -> 100%)
-	useEffect(() => {
-		if (typeof window === "undefined" || !window.electronAPI?.onCloudinaryProgress) return;
-		return window.electronAPI.onCloudinaryProgress((next) => {
-			if (next.uploadId !== activeUploadId.current) return;
-			if (next.totalBytes <= 0 || !Number.isFinite(next.uploadedBytes)) return;
-			const ratio = Math.min(1, next.uploadedBytes / next.totalBytes);
-			setProgress(Math.round(60 + ratio * 40));
-		});
-	}, []);
 
 	const discardPreparedFile = useCallback(() => {
 		const preparedPath = preparedFileRef.current;
@@ -78,268 +73,271 @@ export function CloudinaryShareButton({
 
 	useEffect(() => discardPreparedFile, [discardPreparedFile]);
 
-	const handleStartUpload = async () => {
-		if (!config) {
-			setConnectDialogOpen(true);
+	const handleConnect = async () => {
+		if (!authToken) {
+			onRequestSignIn?.();
+			return;
+		}
+		const res = await connect();
+		if (!res.success && res.error) {
+			toast.error(res.error);
+		}
+	};
+
+	const handleDisconnect = async () => {
+		const res = await disconnect();
+		if (res.success) {
+			setLastUploadedItem(null);
+		} else if (res.error) {
+			toast.error(res.error);
+		}
+	};
+
+	const handleShare = async () => {
+		if (!authToken) {
+			onRequestSignIn?.();
+			return;
+		}
+		if (!account.connected) {
+			await handleConnect();
 			return;
 		}
 
-		setError(null);
-		setUploadUrl(null);
-		setProgress(0);
-		setPhase("preparing");
+		setErrorMessage(null);
+		setLastUploadedItem(null);
+		setCopied(false);
 
-		try {
-			// 1. Prepare/Export video file
-			let resolvedFilePath: string | undefined;
-			if (prepareFile) {
-				resolvedFilePath = await prepareFile();
+		if (!prepareFile) {
+			const results = await pickAndUploadFiles({ folder: "AnyRecord" });
+			const first = results.find((r) => r.status === "done" && r.secureUrl);
+			if (first?.secureUrl) {
+				setLastUploadedItem(first);
+				void copyTextToClipboard(first.secureUrl).then((success) => {
+					if (success) {
+						setCopied(true);
+						toast.success("Link created and copied to clipboard!");
+					} else {
+						toast.success("Link created");
+					}
+				});
 			}
+			return;
+		}
 
+		setPreparingRecording(true);
+		try {
+			const resolvedFilePath = await prepareFile();
 			if (!resolvedFilePath) {
 				throw new Error("Could not prepare video for upload.");
 			}
 			preparedFileRef.current = resolvedFilePath;
+			setPreparingRecording(false);
 
-			// 2. Start Cloudinary upload
-			const nextUploadId = crypto.randomUUID();
-			activeUploadId.current = nextUploadId;
-			setPhase("uploading");
-			setProgress(60);
+			const ext = exportFormat === "gif" ? "gif" : "mp4";
+			const resourceType = exportFormat === "gif" ? "image" : "video";
 
-			if (!window.electronAPI?.cloudinaryUpload) {
-				throw new Error("Cloudinary upload is not supported in this environment.");
+			const results = await uploadFiles([
+				{
+					filePath: resolvedFilePath,
+					fileName: `${projectTitle || "recording"}.${ext}`,
+					resourceType,
+					title: projectTitle,
+					folder: "AnyRecord",
+				},
+			]);
+
+			const first = results[0];
+			if (first?.status === "done" && first.secureUrl) {
+				setLastUploadedItem(first);
+				void copyTextToClipboard(first.secureUrl).then((success) => {
+					if (success) {
+						setCopied(true);
+						toast.success("Link created and copied to clipboard!");
+					} else {
+						toast.success("Link created");
+					}
+				});
+			} else if (first?.error) {
+				toast.error(first.error);
 			}
-
-			const result = await window.electronAPI.cloudinaryUpload({
-				filePath: resolvedFilePath,
-				cloudName: config.cloudName,
-				uploadPreset: config.uploadPreset,
-				folder: config.folder || "AnyRecord",
-				title: projectTitle,
-				uploadId: nextUploadId,
-			});
-
-			if (!result.success || !result.url) {
-				if (result.canceled) {
-					toast.info("Upload canceled");
-					setPhase("idle");
-					return;
-				}
-				throw new Error(result.error || "Upload failed");
-			}
-
-			setProgress(100);
-			setUploadUrl(result.url);
-			setPhase("done");
-			toast.success("Uploaded to Cloudinary successfully!");
 		} catch (err) {
-			setError(err instanceof Error ? err.message : String(err));
-			setPhase("idle");
-			toast.error(err instanceof Error ? err.message : "Upload failed");
+			const msg = err instanceof Error ? err.message : "Upload failed";
+			setErrorMessage(msg);
 		} finally {
-			activeUploadId.current = undefined;
+			setPreparingRecording(false);
+			discardPreparedFile();
 		}
 	};
 
-	const handleCancel = async () => {
-		if (phase === "preparing") {
+	const handleCancelActive = async () => {
+		if (preparingRecording) {
 			onCancelPrepare?.();
-			setPhase("idle");
+			setPreparingRecording(false);
+			discardPreparedFile();
 			return;
 		}
-		if (
-			phase === "uploading" &&
-			activeUploadId.current &&
-			window.electronAPI?.cloudinaryCancel
-		) {
-			await window.electronAPI.cloudinaryCancel(activeUploadId.current);
+		const active = uploadItems.filter(
+			(item) => item.status === "uploading" || item.status === "queued",
+		);
+		for (const item of active) {
+			await cancelUpload(item.uploadId);
 		}
-		setPhase("idle");
-		discardPreparedFile();
 	};
 
-	const handleCopy = async () => {
-		if (!uploadUrl) return;
-		try {
-			await navigator.clipboard.writeText(uploadUrl);
+	const copyShareUrl = async () => {
+		const url = lastUploadedItem?.secureUrl;
+		if (!url) return;
+		const success = await copyTextToClipboard(url);
+		if (success) {
 			setCopied(true);
-			toast.success("Cloudinary video link copied!");
-			setTimeout(() => setCopied(false), 2000);
-		} catch {
-			toast.error("Could not copy link to clipboard");
+			toast.success("Link copied");
+		} else {
+			setCopied(false);
+			toast.error("Could not copy link automatically. Please copy it manually.");
 		}
 	};
 
-	const handleOpenInBrowser = () => {
-		if (!uploadUrl) return;
-		if (window.electronAPI?.openExternalUrl) {
-			void window.electronAPI.openExternalUrl(uploadUrl);
-		} else {
-			window.open(uploadUrl, "_blank");
-		}
-	};
+	const combinedProgress = preparingRecording
+		? Math.max(5, Math.min(70, Math.round(preparationProgress * 0.7)))
+		: Math.max(5, overallUploadProgress);
 
 	return (
 		<div className="space-y-4 px-5 pb-5">
-			<CloudinaryConnectDialog
-				open={connectDialogOpen}
-				onOpenChange={setConnectDialogOpen}
-				onConnected={(newConfig) => {
-					setConfig(newConfig);
-					setError(null);
-				}}
-				onDisconnected={() => {
-					setConfig(null);
-					setPhase("idle");
-					setUploadUrl(null);
-				}}
-			/>
+			{account.connected && !isConnecting ? (
+				<div className="flex items-center justify-between text-xs text-muted-foreground">
+					<span className="inline-flex items-center gap-2 truncate">
+						<span className="size-2 shrink-0 rounded-full bg-emerald-500" />
+						<span className="truncate font-medium text-foreground">
+							{account.cloudName || "Connected"}
+						</span>
+					</span>
+					{!isBusy && (
+						<button
+							type="button"
+							onClick={() => void handleDisconnect()}
+							className="text-xs text-muted-foreground hover:text-foreground"
+						>
+							Disconnect
+						</button>
+					)}
+				</div>
+			) : null}
 
-			{!config ? (
-				/* Not connected state */
-				<div className="rounded-xl border border-sky-500/20 bg-sky-500/5 p-4 text-center">
-					<div className="mx-auto flex size-12 items-center justify-center rounded-full bg-sky-500/10 text-sky-500">
-						<CloudArrowUp size={28} weight="duotone" />
-					</div>
-					<h3 className="mt-2 text-sm font-semibold text-foreground">
-						Connect Cloudinary
-					</h3>
-					<p className="mt-1 text-xs text-muted-foreground">
-						Store, stream, and share your recordings with your Cloudinary media cloud.
-					</p>
-					<Button
-						onClick={() => setConnectDialogOpen(true)}
-						className="mt-3 w-full gap-2 bg-sky-500 text-white hover:bg-sky-600"
+			{isBusy || isConnecting || uiState === "connecting" ? (
+				<div className="space-y-2">
+					<ProgressBar
+						aria-label={isConnecting ? "Connecting" : "Uploading"}
+						isIndeterminate={isConnecting || combinedProgress <= 5}
+						value={Math.min(combinedProgress, 100)}
 					>
-						<CloudArrowUp size={16} weight="bold" />
-						Connect Cloudinary
+						<ProgressBar.Track>
+							<ProgressBar.Fill />
+						</ProgressBar.Track>
+					</ProgressBar>
+					<p className="text-xs text-muted-foreground">
+						{isConnecting
+							? "Waiting for authorization…"
+							: `${preparingRecording ? "Preparing" : "Uploading"} · ${combinedProgress}%`}
+					</p>
+				</div>
+			) : null}
+
+			{errorMessage ? <p className="text-sm text-destructive">{errorMessage}</p> : null}
+
+			{lastUploadedItem?.secureUrl && !isBusy ? (
+				<div className="space-y-2">
+					<div className="flex items-center gap-2 rounded-lg border border-input bg-muted/30 px-3 py-1.5 focus-within:border-primary/50 transition-colors">
+						<input
+							type="text"
+							readOnly
+							value={lastUploadedItem.secureUrl}
+							onClick={(e) => (e.target as HTMLInputElement).select()}
+							onFocus={(e) => (e.target as HTMLInputElement).select()}
+							className="min-w-0 flex-1 bg-transparent text-xs text-muted-foreground outline-none select-all"
+						/>
+						<Button
+							type="button"
+							variant="ghost"
+							size="sm"
+							onClick={() => void copyShareUrl()}
+							className="h-7 shrink-0 gap-1 px-2 text-xs"
+						>
+							{copied ? (
+								<>
+									<Check className="size-3.5 text-emerald-500" />
+									<span className="text-emerald-500">Copied</span>
+								</>
+							) : (
+								<>
+									<Copy className="size-3.5" />
+									<span>Copy</span>
+								</>
+							)}
+						</Button>
+					</div>
+					<Button
+						type="button"
+						size="lg"
+						onClick={() => void copyShareUrl()}
+						className="w-full gap-2"
+					>
+						{copied ? (
+							<Check className="h-4 w-4 text-emerald-500" />
+						) : (
+							<LinkSimple className="h-4 w-4" />
+						)}
+						{copied ? "Copied" : "Copy link"}
 					</Button>
 				</div>
 			) : (
-				/* Connected state */
-				<div className="space-y-3">
-					{/* Status pill */}
-					<div className="flex items-center justify-between rounded-lg border border-border/80 bg-muted/30 px-3 py-2 text-xs">
-						<div className="flex items-center gap-2">
-							<span className="flex size-2 rounded-full bg-emerald-500" />
-							<span className="text-muted-foreground">Connected:</span>
-							<strong className="font-semibold text-foreground">
-								{config.cloudName}
-							</strong>
-						</div>
-						<button
+				<div className="flex justify-end gap-2">
+					{isBusy ? (
+						<Button
 							type="button"
-							onClick={() => setConnectDialogOpen(true)}
-							disabled={isBusy}
-							className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground disabled:opacity-50"
+							variant="outline"
+							onClick={() => void handleCancelActive()}
 						>
-							<Gear size={13} />
-							Settings
-						</button>
-					</div>
-
-					{error ? (
-						<div className="flex items-start gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 p-2.5 text-xs text-rose-500">
-							<XCircle size={16} className="mt-0.5 shrink-0" weight="fill" />
-							<span>{error}</span>
-						</div>
-					) : null}
-
-					{phase === "done" && uploadUrl ? (
-						/* Completed state */
-						<div className="space-y-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3.5">
-							<div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
-								<CheckCircle size={20} weight="fill" />
-								<span className="text-xs font-semibold">
-									Video uploaded to Cloudinary!
-								</span>
-							</div>
-
-							<div className="flex items-center gap-2 rounded-md border border-border bg-background p-1.5 text-xs">
-								<input
-									type="text"
-									readOnly
-									value={uploadUrl}
-									className="w-full bg-transparent px-1 text-[11px] text-muted-foreground outline-none"
-								/>
-								<Button
-									size="sm"
-									variant="secondary"
-									onClick={handleCopy}
-									className="h-7 shrink-0 gap-1 px-2 text-xs"
-								>
-									{copied ? <Check size={14} /> : <Copy size={14} />}
-									{copied ? "Copied" : "Copy"}
-								</Button>
-							</div>
-
-							<div className="flex items-center gap-2">
-								<Button
-									size="sm"
-									variant="outline"
-									onClick={handleOpenInBrowser}
-									className="w-full gap-1.5 text-xs"
-								>
-									<ArrowSquareOut size={14} />
-									Open Video
-								</Button>
-								<Button
-									size="sm"
-									variant="ghost"
-									onClick={() => {
-										setPhase("idle");
-										setUploadUrl(null);
-									}}
-									className="text-xs text-muted-foreground hover:text-foreground"
-								>
-									Reset
-								</Button>
-							</div>
-						</div>
-					) : isBusy ? (
-						/* Uploading / Preparing state */
-						<div className="space-y-2 rounded-xl border border-sky-500/20 bg-sky-500/5 p-3.5">
-							<div className="flex items-center justify-between text-xs">
-								<span className="font-medium text-foreground">
-									{phase === "preparing"
-										? "Preparing video…"
-										: "Uploading to Cloudinary…"}
-								</span>
-								<span className="font-semibold text-sky-500">{progress}%</span>
-							</div>
-							<div className="h-1.5 w-full overflow-hidden rounded-full bg-sky-500/20">
-								<div
-									className="h-full bg-sky-500 transition-all duration-300"
-									style={{ width: `${progress}%` }}
-								/>
-							</div>
-							<div className="pt-1">
-								<Button
-									size="sm"
-									variant="outline"
-									onClick={handleCancel}
-									className="w-full text-xs text-rose-500 hover:bg-rose-500/10 hover:text-rose-600"
-								>
-									Cancel
-								</Button>
-							</div>
-						</div>
+							Cancel
+						</Button>
+					) : isConnecting || uiState === "connecting" ? (
+						<Button
+							type="button"
+							variant="outline"
+							size="lg"
+							className="w-full"
+							onClick={cancelConnect}
+						>
+							Cancel
+						</Button>
+					) : account.connected ? (
+						<Button
+							type="button"
+							size="lg"
+							className="w-full"
+							onClick={() => void handleShare()}
+						>
+							<CloudArrowUp className="h-4 w-4" />
+							Upload to Cloudinary
+						</Button>
+					) : !authToken ? (
+						<Button
+							type="button"
+							size="lg"
+							className="w-full"
+							onClick={onRequestSignIn}
+						>
+							Sign in to connect Cloudinary
+						</Button>
 					) : (
-						/* Idle ready to upload state */
-						<div className="space-y-2">
-							<Button
-								onClick={handleStartUpload}
-								className="w-full gap-2 bg-sky-500 text-white hover:bg-sky-600"
-							>
-								<CloudArrowUp size={16} weight="bold" />
-								Upload to Cloudinary
-							</Button>
-							<p className="text-center text-[11px] text-muted-foreground">
-								Video will be uploaded to folder:{" "}
-								<strong>{config.folder || "AnyRecord"}</strong>
-							</p>
-						</div>
+						<Button
+							type="button"
+							size="lg"
+							className="w-full"
+							disabled={loadingStatus}
+							onClick={() => void handleConnect()}
+						>
+							Connect Cloudinary
+						</Button>
 					)}
 				</div>
 			)}

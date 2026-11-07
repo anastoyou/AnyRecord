@@ -1,19 +1,22 @@
-import { FeedbackDialog } from "@/components/feedback/FeedbackDialog";
 import { Separator } from "@heroui/react";
+import type { CSSProperties, FormEvent, RefObject } from "react";
+import { FeedbackDialog } from "@/components/feedback/FeedbackDialog";
+import { BuyMeACoffeeButton } from "@/components/ui/BuyMeACoffeeButton";
+import { Button } from "@/components/ui/button";
 import {
-	House,
 	FilmStrip,
+	House,
 	ArrowClockwise as Redo2,
 	ArrowCounterClockwise as Undo2,
 } from "@/components/ui/icons";
-import type { CSSProperties, FormEvent, RefObject } from "react";
-import { Button } from "@/components/ui/button";
 import type { useI18n } from "@/contexts/I18nContext";
+import { CloudProjectSyncButton } from "../cloud/CloudProjectSyncButton";
 import type { useExportDimensions } from "../export/useExportDimensions";
 import type { useExportSession } from "../export/useExportSession";
 import type { useExportSettings } from "../export/useExportSettings";
 import type { useExportStatusViewModel } from "../export/useExportStatusViewModel";
 import type { useVideoEditorPresets } from "../presets/useVideoEditorPresets";
+import type { EditorProjectData } from "../projectPersistence";
 import type { useProjectState } from "../state/useProjectState";
 import { EditorExportMenu } from "./EditorExportMenu";
 import { EditorPresetMenu } from "./EditorPresetMenu";
@@ -51,14 +54,20 @@ type Props = {
 	handleExportDropdownClose: () => void;
 	handleCancelExport: () => void;
 	handleRetrySaveExport: () => void;
-	handleStartExportFromDropdown: () => void;
+	handleStartExportFromDropdown: () => Promise<string | undefined> | void;
 	revealExportedFile: () => void;
 	exportMessage: string | null;
 	prepareExportForShare: () => Promise<string | undefined>;
+	prepareExportForCloudinary: () => Promise<string | undefined>;
 	onRequestShareSignIn: () => void;
 	shareRequestNonce: number;
 	authToken?: string;
 	accountId?: string;
+	currentProjectSnapshot?: EditorProjectData | null;
+	currentSourcePath?: string | null;
+	captureThumbnail?: () => Promise<string | null>;
+	saveLocalProject?: () => Promise<unknown>;
+	refreshProjectLibrary?: () => Promise<void>;
 };
 
 export function EditorHeader(props: Props) {
@@ -222,7 +231,22 @@ export function EditorHeader(props: Props) {
 					</Button>
 				</div>
 				{SHOW_PRESETS_BUTTON && <EditorPresetMenu t={t} presets={presets} />}
-				<FeedbackDialog />
+				<FeedbackDialog authToken={props.authToken} />
+				<BuyMeACoffeeButton
+					size="icon"
+					className="size-9 rounded-lg"
+					title="Support AnyRecord - Buy me a coffee"
+				/>
+				<CloudProjectSyncButton
+					projectDisplayName={projectDisplayName}
+					projectData={props.currentProjectSnapshot ?? null}
+					currentSourcePath={props.currentSourcePath ?? null}
+					captureThumbnail={props.captureThumbnail}
+					saveLocalProject={props.saveLocalProject}
+					refreshProjectLibrary={props.refreshProjectLibrary}
+					authToken={props.authToken}
+					accountId={props.accountId}
+				/>
 				<EditorExportMenu
 					t={t}
 					exportSettings={exportSettings}
@@ -243,6 +267,7 @@ export function EditorHeader(props: Props) {
 					projectPath={project.currentProjectPath}
 					projectTitle={projectDisplayName}
 					prepareExportForShare={props.prepareExportForShare}
+					prepareExportForCloudinary={props.prepareExportForCloudinary}
 					onRequestShareSignIn={props.onRequestShareSignIn}
 					shareRequestNonce={props.shareRequestNonce}
 					authToken={props.authToken}

@@ -4,10 +4,13 @@ import { motion, useReducedMotion } from "motion/react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ExportErrorReportButton } from "@/components/feedback/ExportErrorReportButton";
 import { Button } from "@/components/ui/button";
+import { Check } from "@/components/ui/icons";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 import { toast } from "@/components/ui/toast";
 import type { useI18n } from "@/contexts/I18nContext";
+import { useCloudinaryConnection } from "@/lib/cloudinary/useCloudinaryConnection";
+import { copyTextToClipboard } from "@/utils/clipboard";
 import { CloudinaryShareButton } from "../cloud/CloudinaryShareButton";
 import { CloudShareButton } from "../cloud/CloudShareButton";
 import { ExportSettingsMenu } from "../ExportSettingsMenu";
@@ -31,11 +34,12 @@ type Props = {
 	handleExportDropdownClose: () => void;
 	handleCancelExport: () => void;
 	handleRetrySaveExport: () => void;
-	handleStartExportFromDropdown: () => void;
+	handleStartExportFromDropdown: () => Promise<string | undefined> | void;
 	revealExportedFile: () => void;
 	exportMessage: string | null;
 	projectTitle: string;
 	prepareExportForShare: () => Promise<string | undefined>;
+	prepareExportForCloudinary: () => Promise<string | undefined>;
 	onRequestShareSignIn: () => void;
 	shareRequestNonce: number;
 	authToken?: string;
@@ -106,6 +110,8 @@ export function EditorExportMenu(props: Props) {
 		setGifSizePreset,
 		includeCaptionSidecar,
 		setIncludeCaptionSidecar,
+		uploadToCloudinary,
+		setUploadToCloudinary,
 	} = exportSettings;
 	const {
 		isExporting,
@@ -131,6 +137,57 @@ export function EditorExportMenu(props: Props) {
 		nativeSkipLabel: exportNativeSkipLabel,
 	} = exportStatus;
 
+	const {
+		account,
+		uploadFiles,
+		overallUploadProgress,
+		isUploading: isCloudinaryUploading,
+	} = useCloudinaryConnection({
+		authToken: props.authToken,
+		accountId: props.accountId,
+	});
+
+	const isCloudinaryConnected = Boolean(props.authToken && account.connected);
+
+	const [cloudinaryUploadState, setCloudinaryUploadState] = useState<
+		"idle" | "uploading" | "done" | "error"
+	>("idle");
+	const [cloudinaryUploadedUrl, setCloudinaryUploadedUrl] = useState<string | null>(null);
+
+	const handleStartExportWithCloudinary = async () => {
+		setCloudinaryUploadState("idle");
+		setCloudinaryUploadedUrl(null);
+		const savedPath = await handleStartExportFromDropdown();
+		if (savedPath && uploadToCloudinary && isCloudinaryConnected) {
+			setCloudinaryUploadState("uploading");
+			try {
+				const results = await uploadFiles([
+					{
+						filePath: savedPath,
+						fileName: `${props.projectTitle || "recording"}.${exportFormat}`,
+						resourceType: exportFormat === "gif" ? "image" : "video",
+						title: props.projectTitle,
+						folder: "AnyRecord",
+					},
+				]);
+				const first = results.find((r) => r.status === "done" && r.secureUrl);
+				if (first?.secureUrl) {
+					setCloudinaryUploadState("done");
+					setCloudinaryUploadedUrl(first.secureUrl);
+					toast.success("Uploaded to Cloudinary");
+				} else {
+					const err =
+						results.find((r) => r.error)?.error || "Upload to Cloudinary failed";
+					setCloudinaryUploadState("error");
+					toast.error(err);
+				}
+			} catch (err) {
+				setCloudinaryUploadState("error");
+				toast.error(err instanceof Error ? err.message : "Cloudinary upload failed");
+			}
+		}
+	};
+
 	const settingsForm = (
 		<ExportSettingsMenu
 			exportFormat={destination === "link" ? "mp4" : exportFormat}
@@ -154,9 +211,12 @@ export function EditorExportMenu(props: Props) {
 			showCaptionSidecarOption={hasCaptionsForSidecar && exportFormat === "mp4"}
 			includeCaptionSidecar={includeCaptionSidecar}
 			onIncludeCaptionSidecarChange={setIncludeCaptionSidecar}
+			showCloudinaryOption={isCloudinaryConnected}
+			uploadToCloudinary={uploadToCloudinary}
+			onUploadToCloudinaryChange={setUploadToCloudinary}
 			mp4OutputDimensions={mp4OutputDimensions}
 			gifOutputDimensions={gifOutputDimensions}
-			onExport={handleStartExportFromDropdown}
+			onExport={handleStartExportWithCloudinary}
 			hideHeading
 			hideAction={destination === "link"}
 			linkMode={destination === "link"}
@@ -253,14 +313,55 @@ export function EditorExportMenu(props: Props) {
 							</div>
 							<div>
 								{destination === "cloudinary" ? (
-									<CloudinaryShareButton
-										projectPath={props.projectPath}
-										projectTitle={props.projectTitle}
-										prepareFile={props.prepareExportForShare}
-										onCancelPrepare={handleCancelExport}
-										preparationProgress={exportProgress?.percentage ?? 0}
-										onBusyChange={setShareBusy}
-									/>
+									<div>
+										<ExportSettingsMenu
+											exportFormat={exportFormat}
+											onExportFormatChange={setExportFormat}
+											exportEncodingMode={exportEncodingMode}
+											onExportEncodingModeChange={setExportEncodingMode}
+											mp4FrameRate={mp4FrameRate}
+											onMp4FrameRateChange={setMp4FrameRate}
+											exportPipelineModel={exportPipelineModel}
+											experimentalNvidiaCudaExport={
+												experimentalNvidiaCudaExport &&
+												nvidiaCudaExportAvailable
+											}
+											onExperimentalNvidiaCudaExportChange={
+												setExperimentalNvidiaCudaExport
+											}
+											nvidiaCudaExportAvailable={nvidiaCudaExportAvailable}
+											exportQuality={exportQuality}
+											onExportQualityChange={setExportQuality}
+											gifFrameRate={gifFrameRate}
+											onGifFrameRateChange={setGifFrameRate}
+											gifLoop={gifLoop}
+											onGifLoopChange={setGifLoop}
+											gifSizePreset={gifSizePreset}
+											onGifSizePresetChange={setGifSizePreset}
+											showCaptionSidecarOption={false}
+											showCloudinaryOption={false}
+											mp4OutputDimensions={mp4OutputDimensions}
+											gifOutputDimensions={gifOutputDimensions}
+											hideHeading
+											hideAction
+											className="rounded-none bg-transparent px-5 pb-3 pt-0 shadow-none"
+										/>
+										<CloudinaryShareButton
+											projectPath={props.projectPath}
+											projectTitle={props.projectTitle}
+											exportFormat={exportFormat}
+											prepareFile={props.prepareExportForCloudinary}
+											onCancelPrepare={handleCancelExport}
+											preparationProgress={exportProgress?.percentage ?? 0}
+											onBusyChange={setShareBusy}
+											authToken={props.authToken}
+											accountId={props.accountId}
+											onRequestSignIn={() => {
+												setShowExportDropdown(false);
+												props.onRequestShareSignIn();
+											}}
+										/>
+									</div>
 								) : destination === "link" ? (
 									<div className="px-5 pb-5">
 										<CloudShareButton
@@ -391,17 +492,16 @@ export function EditorExportMenu(props: Props) {
 												variant="outline"
 												className="h-8 text-xs"
 												onClick={async () => {
-													try {
-														await navigator.clipboard.writeText(
-															exportError,
-														);
+													const copied =
+														await copyTextToClipboard(exportError);
+													if (copied) {
 														toast.success(
 															t(
 																"editor.exportStatus.errorCopied",
 																"Error copied",
 															),
 														);
-													} catch {
+													} else {
 														toast.error(
 															t(
 																"editor.exportStatus.errorCopyFailed",
@@ -456,6 +556,55 @@ export function EditorExportMenu(props: Props) {
 										<p className="mt-3 truncate text-xs text-muted-foreground/70">
 											{exportedFilePath.split(/[\\/]/).pop()}
 										</p>
+										{cloudinaryUploadState === "uploading" ||
+										isCloudinaryUploading ? (
+											<div className="mt-3 space-y-1.5">
+												<div className="flex items-center justify-between text-xs text-muted-foreground">
+													<span className="inline-flex items-center gap-1.5">
+														<CloudArrowUp className="size-3.5 text-sky-500 animate-pulse" />
+														Uploading to Cloudinary…
+													</span>
+													<span>{overallUploadProgress}%</span>
+												</div>
+												<ProgressBar
+													aria-label="Cloudinary upload"
+													value={overallUploadProgress}
+												>
+													<ProgressBar.Track>
+														<ProgressBar.Fill />
+													</ProgressBar.Track>
+												</ProgressBar>
+											</div>
+										) : cloudinaryUploadState === "done" &&
+											cloudinaryUploadedUrl ? (
+											<div className="mt-3 flex items-center justify-between rounded-lg bg-emerald-500/10 px-2.5 py-1.5 text-xs text-emerald-600 dark:text-emerald-400">
+												<span className="inline-flex items-center gap-1.5 font-medium">
+													<Check className="size-3.5" />
+													Uploaded to Cloudinary
+												</span>
+												<button
+													type="button"
+													onClick={async () => {
+														const success =
+															await copyTextToClipboard(
+																cloudinaryUploadedUrl,
+															);
+														if (success) {
+															toast.success("Cloudinary link copied");
+														} else {
+															toast.error("Could not copy link");
+														}
+													}}
+													className="underline hover:text-emerald-700 dark:hover:text-emerald-300"
+												>
+													Copy link
+												</button>
+											</div>
+										) : cloudinaryUploadState === "error" ? (
+											<p className="mt-3 text-xs text-destructive">
+												Upload to Cloudinary failed.
+											</p>
+										) : null}
 										<div className="mt-4 flex gap-2">
 											<Button
 												type="button"

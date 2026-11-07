@@ -10,7 +10,7 @@ import type {
 	GifSizePreset,
 } from "@/lib/exporter";
 import { projectCaptionCues } from "../captionTimeline";
-import { saveEditorPreferences, type EditorPreferences } from "../editorPreferences";
+import { type EditorPreferences, saveEditorPreferences } from "../editorPreferences";
 import type { CaptionCue, ClipRegion } from "../types";
 
 const DEFAULT_MP4_EXPORT_FRAME_RATE: ExportMp4FrameRate = 30;
@@ -41,6 +41,9 @@ export function useExportSettings(
 	const [gifFrameRate, setGifFrameRate] = useState<GifFrameRate>(preferences.gifFrameRate);
 	const [gifLoop, setGifLoop] = useState(preferences.gifLoop);
 	const [gifSizePreset, setGifSizePreset] = useState<GifSizePreset>(preferences.gifSizePreset);
+	const [uploadToCloudinary, setUploadToCloudinary] = useState(
+		preferences.uploadToCloudinary ?? false,
+	);
 	useEffect(() => {
 		saveEditorPreferences({
 			publishDestination,
@@ -54,6 +57,7 @@ export function useExportSettings(
 			gifFrameRate,
 			gifLoop,
 			gifSizePreset,
+			uploadToCloudinary,
 		});
 	}, [
 		publishDestination,
@@ -67,6 +71,7 @@ export function useExportSettings(
 		gifFrameRate,
 		gifLoop,
 		gifSizePreset,
+		uploadToCloudinary,
 	]);
 
 	const captionSidecarCues = useMemo(
@@ -107,6 +112,8 @@ export function useExportSettings(
 		setGifLoop,
 		gifSizePreset,
 		setGifSizePreset,
+		uploadToCloudinary,
+		setUploadToCloudinary,
 		captionSidecarCues,
 	};
 }

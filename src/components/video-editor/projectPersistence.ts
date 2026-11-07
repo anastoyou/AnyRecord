@@ -1,9 +1,15 @@
-import { getLocalMediaServerPath } from "@/lib/localMediaUrl";
 import type { SourceAudioTrackSettings } from "@/components/video-editor/audio/audioTypes";
+import { getLocalMediaServerPath } from "@/lib/localMediaUrl";
 import { DEFAULT_WALLPAPER_PATH } from "@/lib/wallpapers";
 import { ASPECT_RATIOS, type AspectRatio, isCustomAspectRatio } from "@/utils/aspectRatioUtils";
+import type { AudioPortion } from "./audio/audioPortion";
 import { closeClipGaps, rippleRegionAnchors, rippleRegions } from "./clipSequence";
 import { CURSOR_MOTION_PRESETS, resolveCursorMotionPresetId } from "./cursorMotionPresets";
+import {
+	DEFAULT_GESTURE_TRACKING_SETTINGS,
+	type FingerGestureRegion,
+	type GestureTrackingSettings,
+} from "./gestures/gestureTypes";
 import {
 	ADVANCED_VERTICAL_PADDING_MAX,
 	type AnnotationRegion,
@@ -64,13 +70,7 @@ import {
 	type ZoomRegion,
 	type ZoomTransitionEasing,
 } from "./types";
-import type { AudioPortion } from "./audio/audioPortion";
 import { convertLegacyWebcamRadiusToRoundness, normalizeWebcamCropRegion } from "./webcamOverlay";
-import {
-	DEFAULT_GESTURE_TRACKING_SETTINGS,
-	type FingerGestureRegion,
-	type GestureTrackingSettings,
-} from "./gestures/gestureTypes";
 
 export const PROJECT_VERSION = 2;
 export const MACOS_DEFAULT_BORDER_RADIUS_PERCENT = 8;
@@ -193,9 +193,7 @@ function normalizeAutoCaptionAnimation(
 	value: unknown,
 	fallback: AutoCaptionAnimation,
 ): AutoCaptionAnimation {
-	return typeof value === "string" && value.trim()
-		? (value as AutoCaptionAnimation)
-		: fallback;
+	return typeof value === "string" && value.trim() ? (value as AutoCaptionAnimation) : fallback;
 }
 
 function isFileUrl(value: string): boolean {
@@ -823,7 +821,8 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 				? rawAutoCaptionSettings.timelineQuickAdd
 				: DEFAULT_AUTO_CAPTION_SETTINGS.timelineQuickAdd,
 		engine:
-			rawAutoCaptionSettings.engine === "google" || rawAutoCaptionSettings.engine === "whisper"
+			rawAutoCaptionSettings.engine === "google" ||
+			rawAutoCaptionSettings.engine === "whisper"
 				? rawAutoCaptionSettings.engine
 				: DEFAULT_AUTO_CAPTION_SETTINGS.engine,
 		language:
@@ -834,7 +833,8 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 		translate:
 			typeof rawAutoCaptionSettings.translate === "boolean"
 				? rawAutoCaptionSettings.translate
-				: typeof (rawAutoCaptionSettings as { noTranslate?: boolean }).noTranslate === "boolean"
+				: typeof (rawAutoCaptionSettings as { noTranslate?: boolean }).noTranslate ===
+						"boolean"
 					? !(rawAutoCaptionSettings as { noTranslate?: boolean }).noTranslate
 					: DEFAULT_AUTO_CAPTION_SETTINGS.translate,
 		fontFamily:
@@ -856,13 +856,10 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 			? rawAutoCaptionSettings.lineHeight
 			: DEFAULT_AUTO_CAPTION_SETTINGS.lineHeight,
 		textTransform:
-			rawAutoCaptionSettings.textTransform ??
-			DEFAULT_AUTO_CAPTION_SETTINGS.textTransform,
-		fontStyle:
-			rawAutoCaptionSettings.fontStyle ?? DEFAULT_AUTO_CAPTION_SETTINGS.fontStyle,
+			rawAutoCaptionSettings.textTransform ?? DEFAULT_AUTO_CAPTION_SETTINGS.textTransform,
+		fontStyle: rawAutoCaptionSettings.fontStyle ?? DEFAULT_AUTO_CAPTION_SETTINGS.fontStyle,
 		textDecoration:
-			rawAutoCaptionSettings.textDecoration ??
-			DEFAULT_AUTO_CAPTION_SETTINGS.textDecoration,
+			rawAutoCaptionSettings.textDecoration ?? DEFAULT_AUTO_CAPTION_SETTINGS.textDecoration,
 		textOpacity: isFiniteNumber(rawAutoCaptionSettings.textOpacity)
 			? clamp(rawAutoCaptionSettings.textOpacity, 0, 1)
 			: (DEFAULT_AUTO_CAPTION_SETTINGS.textOpacity ?? 1),
@@ -871,9 +868,7 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 		bottomOffset: isFiniteNumber(rawAutoCaptionSettings.bottomOffset)
 			? clamp(rawAutoCaptionSettings.bottomOffset, 0, 60)
 			: DEFAULT_AUTO_CAPTION_SETTINGS.bottomOffset,
-		alignment:
-			rawAutoCaptionSettings.alignment ??
-			DEFAULT_AUTO_CAPTION_SETTINGS.alignment,
+		alignment: rawAutoCaptionSettings.alignment ?? DEFAULT_AUTO_CAPTION_SETTINGS.alignment,
 		verticalPosition:
 			rawAutoCaptionSettings.verticalPosition ??
 			DEFAULT_AUTO_CAPTION_SETTINGS.verticalPosition,
@@ -891,8 +886,7 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 			: DEFAULT_AUTO_CAPTION_SETTINGS.maxRows,
 		showSafeGuides: Boolean(rawAutoCaptionSettings.showSafeGuides),
 		backgroundStyle:
-			rawAutoCaptionSettings.backgroundStyle ??
-			DEFAULT_AUTO_CAPTION_SETTINGS.backgroundStyle,
+			rawAutoCaptionSettings.backgroundStyle ?? DEFAULT_AUTO_CAPTION_SETTINGS.backgroundStyle,
 		backgroundColor:
 			typeof rawAutoCaptionSettings.backgroundColor === "string"
 				? rawAutoCaptionSettings.backgroundColor
@@ -908,8 +902,7 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 			? rawAutoCaptionSettings.animationDelayMs
 			: DEFAULT_AUTO_CAPTION_SETTINGS.animationDelayMs,
 		animationScope:
-			rawAutoCaptionSettings.animationScope ??
-			DEFAULT_AUTO_CAPTION_SETTINGS.animationScope,
+			rawAutoCaptionSettings.animationScope ?? DEFAULT_AUTO_CAPTION_SETTINGS.animationScope,
 		animationSpeed: isFiniteNumber(rawAutoCaptionSettings.animationSpeed)
 			? rawAutoCaptionSettings.animationSpeed
 			: DEFAULT_AUTO_CAPTION_SETTINGS.animationSpeed,
@@ -1258,7 +1251,9 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 							x: isFiniteNumber(l.x) ? clamp(l.x, 0, 1) : 0.5,
 							y: isFiniteNumber(l.y) ? clamp(l.y, 0, 1) : 0.5,
 							z: isFiniteNumber(l.z) ? clamp(l.z, 0.1, 2) : 0.6,
-							intensity: isFiniteNumber(l.intensity) ? clamp(l.intensity, 0, 2.5) : 1.0,
+							intensity: isFiniteNumber(l.intensity)
+								? clamp(l.intensity, 0, 2.5)
+								: 1.0,
 							color:
 								typeof l.color === "string" && /^#[0-9A-Fa-f]{3,6}$/.test(l.color)
 									? l.color
@@ -1330,8 +1325,14 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 			volume: isFiniteNumber(webcam.volume)
 				? clamp(webcam.volume, 0, 1)
 				: (DEFAULT_WEBCAM_OVERLAY.volume ?? 1),
-			muted: typeof webcam.muted === "boolean" ? webcam.muted : (DEFAULT_WEBCAM_OVERLAY.muted ?? false),
-			fixed: typeof webcam.fixed === "boolean" ? webcam.fixed : (DEFAULT_WEBCAM_OVERLAY.fixed ?? false),
+			muted:
+				typeof webcam.muted === "boolean"
+					? webcam.muted
+					: (DEFAULT_WEBCAM_OVERLAY.muted ?? false),
+			fixed:
+				typeof webcam.fixed === "boolean"
+					? webcam.fixed
+					: (DEFAULT_WEBCAM_OVERLAY.fixed ?? false),
 			fixedHeightPercent: isFiniteNumber(webcam.fixedHeightPercent)
 				? clamp(webcam.fixedHeightPercent, 15, 75)
 				: (DEFAULT_WEBCAM_OVERLAY.fixedHeightPercent ?? 35),
@@ -1383,6 +1384,7 @@ export function stripProjectUserPreferences<T extends object>(editor: T): T {
 		"gifSizePreset",
 		"publishDestination",
 		"includeCaptionSidecar",
+		"uploadToCloudinary",
 		"whisperExecutablePath",
 		"whisperModelPath",
 	]) {

@@ -6,3 +6,14 @@ verify_jwt = false
 
 [functions.submit-export-error]
 verify_jwt = false
+
+[functions.cloudinary]
+# The handler verifies bearer tokens through auth.getUser and serves the public OAuth callback.
+verify_jwt = false
+
+# External OAuth Providers (GitHub)
+[auth.external.github]
+enabled = true
+client_id = "env(GITHUB_CLIENT_ID)"
+secret = "env(GITHUB_CLIENT_SECRET)"
+redirect_uri = "http://127.0.0.1:43821/auth/callback"

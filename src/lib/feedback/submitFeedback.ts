@@ -24,26 +24,58 @@ export function validateAttachments(files: File[]) {
 		return "Attachments must total 10 MB or less.";
 	return null;
 }
-export async function submitFeedback(input: {
+export interface SubmitFeedbackOptions {
 	title: string;
 	subject: string;
 	message: string;
-	files: File[];
-	logs: string | null;
-}) {
+	files?: File[];
+	logs?: string | null;
+	email?: string | null;
+	userName?: string | null;
+	authToken?: string | null;
+}
+
+export async function submitFeedback(input: SubmitFeedbackOptions) {
+	if (typeof window !== "undefined" && window.electronAPI?.submitUserFeedback) {
+		const filesMeta =
+			input.files && input.files.length > 0
+				? input.files.map((f) => ({ name: f.name, size: f.size, type: f.type }))
+				: undefined;
+
+		const res = await window.electronAPI.submitUserFeedback({
+			subject: input.title.trim() || input.subject || "User Feedback",
+			message: input.message.trim(),
+			category: input.subject || "general",
+			userEmail: input.email ?? null,
+			userName: input.userName ?? null,
+			authToken: input.authToken ?? null,
+			diagnostics: {
+				logs: input.logs ?? null,
+				files: filesMeta,
+				submittedAt: new Date().toISOString(),
+			},
+		});
+
+		if (!res.success) {
+			throw new FeedbackError(res.error || "Could not save feedback. Please try again.");
+		}
+		return;
+	}
+
 	const client = recordlyAuth;
 	if (!client)
 		throw new FeedbackError("Feedback is unavailable until account services are configured.");
 	const { data, error } = await client.auth.getUser();
 	if (error || !data.user) throw new FeedbackError("Please sign in again to send feedback.");
-	const validation = validateAttachments(input.files);
+	const files = input.files ?? [];
+	const validation = validateAttachments(files);
 	if (validation) throw new FeedbackError(validation);
 	const body = new FormData();
 	body.set("title", input.title.trim());
 	body.set("subject", input.subject);
 	body.set("message", input.message.trim());
-	if (input.logs !== null) body.set("logs", input.logs);
-	for (const file of input.files) body.append("files", file);
+	if (input.logs !== null && input.logs !== undefined) body.set("logs", input.logs);
+	for (const file of files) body.append("files", file);
 	const result = await client.functions.invoke("submit-feedback", { body, timeout: 60_000 });
 	if (result.error) {
 		const response = result.error.context;

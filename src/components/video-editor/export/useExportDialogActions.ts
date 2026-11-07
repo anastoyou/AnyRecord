@@ -84,13 +84,13 @@ export function useExportDialogActions({
 		[videoPath, videoPlaybackRef, hasCaptionsForSidecar, settings],
 	);
 
-	const handleStartExportFromDropdown = useCallback(() => {
+	const handleStartExportFromDropdown = useCallback(async () => {
 		const resolvedSettings = resolveCurrentSettings();
-		if (!resolvedSettings) return;
+		if (!resolvedSettings) return undefined;
 		session.setExportError(null);
 		session.setExportedFilePath(undefined);
 		session.setShowExportDropdown(true);
-		void handleExport(resolvedSettings, { destination: "download" });
+		return await handleExport(resolvedSettings, { destination: "download" });
 	}, [resolveCurrentSettings, session, handleExport]);
 
 	const prepareExportForShare = useCallback(async () => {
@@ -99,6 +99,14 @@ export function useExportDialogActions({
 		session.setExportError(null);
 		session.setShowExportDropdown(true);
 		return handleExport(resolveShareExportSettings(resolvedSettings), { destination: "share" });
+	}, [resolveCurrentSettings, session, handleExport]);
+
+	const prepareExportForCloudinary = useCallback(async () => {
+		const resolvedSettings = resolveCurrentSettings();
+		if (!resolvedSettings) return undefined;
+		session.setExportError(null);
+		session.setShowExportDropdown(true);
+		return handleExport(resolvedSettings, { destination: "share" });
 	}, [resolveCurrentSettings, session, handleExport]);
 
 	const handleCancelExport = useCallback(() => {
@@ -180,6 +188,7 @@ export function useExportDialogActions({
 		handleOpenExportDropdown,
 		handleStartExportFromDropdown,
 		prepareExportForShare,
+		prepareExportForCloudinary,
 		handleCancelExport,
 		handleExportDropdownClose,
 		handleRetrySaveExport,
