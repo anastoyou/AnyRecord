@@ -1,6 +1,8 @@
 import type { ClipSequenceSpan } from "../timeline/core/timelineTypes";
 import { type Dispatch, type MutableRefObject, type SetStateAction, useCallback } from "react";
 import { toast } from "@/components/ui/toast";
+import { buildSmartCutSequencePlan } from "@/lib/smartCut/smartCutPlanner";
+import type { SmartCutCandidate } from "@/lib/smartCut/smartCutTypes";
 import { changeClipSpan } from "../clipSpanChange";
 import {
 	packClipSequence,
@@ -197,6 +199,44 @@ export function useClipRegionCommands({
 		[clipRegions, selectedClipId, applySequence, setSelectedClipId],
 	);
 
+	const handleApplySmartCut = useCallback(
+		(cuts: SmartCutCandidate[]) => {
+			const plan = buildSmartCutSequencePlan({
+				clipRegions,
+				sourceDurationMs,
+				cuts,
+				createClipId: () => `clip-${nextClipIdRef.current++}`,
+			});
+			if (plan.appliedCutCount === 0) return null;
+
+			const next = packClipSequence(plan.keptClips);
+			setClipRegions(next);
+			setZoomRegions((current) => rippleRegions(current, plan.splitBeforeClips, next));
+			setAnnotationRegions((current) => rippleRegions(current, plan.splitBeforeClips, next));
+			setAudioRegions((current) => rippleRegionAnchors(current, plan.splitBeforeClips, next));
+			setGestureRegions?.((current) => rippleRegions(current, plan.splitBeforeClips, next));
+			if (selectedClipId && !next.some((clip) => clip.id === selectedClipId)) {
+				setSelectedClipId(null);
+			}
+			return {
+				appliedCutCount: plan.appliedCutCount,
+				removedDurationMs: plan.removedDurationMs,
+			};
+		},
+		[
+			clipRegions,
+			sourceDurationMs,
+			nextClipIdRef,
+			setClipRegions,
+			setZoomRegions,
+			setAnnotationRegions,
+			setAudioRegions,
+			setGestureRegions,
+			selectedClipId,
+			setSelectedClipId,
+		],
+	);
+
 	return {
 		handleSelectClip,
 		handleClipSplit,
@@ -205,5 +245,6 @@ export function useClipRegionCommands({
 		handleClipMutedChange,
 		handleClipShowSourceAudioChange,
 		handleClipDelete,
+		handleApplySmartCut,
 	};
 }

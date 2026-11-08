@@ -30,9 +30,13 @@ import { ASPECT_RATIOS, type AspectRatio, getAspectRatioLabel } from "@/utils/as
 import type { useVideoEditorAudio } from "../audio/useVideoEditorAudio";
 import type { CaptionEditTarget } from "../captionEditing";
 import type { useAnnotationRegionCommands } from "../hooks/useAnnotationRegionCommands";
+import type { useClipRegionCommands } from "../hooks/useClipRegionCommands";
 import type { useEditorPlaybackControls } from "../hooks/useEditorPlaybackControls";
 import type { useTimelineProjection } from "../hooks/useTimelineProjection";
 import type { useZoomRegionCommands } from "../hooks/useZoomRegionCommands";
+import { SmartCutButton } from "../smartCut/SmartCutButton";
+import { SmartCutDialog } from "../smartCut/SmartCutDialog";
+import { useSmartCutController } from "../smartCut/useSmartCutController";
 import type { useAppearanceState } from "../state/useAppearanceState";
 import type { useTimelineState } from "../state/useTimelineState";
 import type { TimelineEditorHandle } from "../timeline/TimelineEditor";
@@ -59,6 +63,7 @@ type Props = {
 	projection: ReturnType<typeof useTimelineProjection>;
 	playback: ReturnType<typeof useEditorPlaybackControls>;
 	zoomCommands: ReturnType<typeof useZoomRegionCommands>;
+	clipCommands?: ReturnType<typeof useClipRegionCommands>;
 	annotationCommands: ReturnType<typeof useAnnotationRegionCommands>;
 	effectiveCursorTelemetry: ReturnType<typeof useTimelineState>["cursorTelemetry"];
 	effectiveShowCursor: boolean;
@@ -66,6 +71,7 @@ type Props = {
 	handleOpenCropEditor: () => void;
 	handleSaveAutoCaptionEdit: (target: CaptionEditTarget, text: string) => void;
 	handleSelectAnnotation: (id: string | null) => void;
+	duration?: number;
 	setDuration: Dispatch<SetStateAction<number>>;
 	isPreviewReady: boolean;
 	setIsPreviewReady: Dispatch<SetStateAction<boolean>>;
@@ -102,6 +108,7 @@ export function EditorPreviewPanel(props: Props) {
 		projection,
 		playback,
 		zoomCommands,
+		clipCommands,
 		annotationCommands,
 		effectiveCursorTelemetry,
 		effectiveShowCursor,
@@ -109,6 +116,7 @@ export function EditorPreviewPanel(props: Props) {
 		handleOpenCropEditor,
 		handleSaveAutoCaptionEdit,
 		handleSelectAnnotation,
+		duration,
 		setDuration,
 		isPreviewReady,
 		setIsPreviewReady,
@@ -116,6 +124,18 @@ export function EditorPreviewPanel(props: Props) {
 		setIsPlaying,
 		setError,
 	} = props;
+
+	const smartCut = useSmartCutController({
+		videoPath,
+		audioPaths: audio.previewSourceAudioFallbackPaths,
+		webcamPath: appearance.webcam?.sourcePath ?? null,
+		durationSec: duration ?? projection.timelineDuration,
+		clipRegions: timeline.clipRegions,
+		cursorTelemetry: effectiveCursorTelemetry,
+		autoCaptions: timeline.autoCaptions,
+		onApplySmartCut: (cuts) => clipCommands?.handleApplySmartCut(cuts) ?? null,
+		onSeekPreview: (timeSec) => playback.handleTimelineSeek(timeSec),
+	});
 
 	return (
 		<div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -298,6 +318,10 @@ export function EditorPreviewPanel(props: Props) {
 					>
 						<Scissors className="h-4 w-4" />
 					</Button>
+					<SmartCutButton
+						disabled={!videoPath}
+						onClick={() => smartCut.setIsOpen(true)}
+					/>
 				</div>
 
 				<div className="editor-playback-center z-10 flex items-center justify-center">
@@ -383,6 +407,21 @@ export function EditorPreviewPanel(props: Props) {
 					</Popover>
 				</div>
 			</div>
+			<SmartCutDialog
+				open={smartCut.isOpen}
+				onOpenChange={smartCut.setIsOpen}
+				options={smartCut.options}
+				onUpdateOptions={smartCut.updateOptions}
+				onResetOptions={smartCut.resetOptions}
+				analyzing={smartCut.analyzing}
+				progress={smartCut.progress}
+				stageLabel={smartCut.stageLabel}
+				result={smartCut.analysisResult}
+				onToggleCut={smartCut.toggleCut}
+				onPreviewCut={smartCut.previewCut}
+				onReanalyze={() => void smartCut.reanalyze()}
+				onApplyCuts={smartCut.applyCuts}
+			/>
 		</div>
 	);
 }

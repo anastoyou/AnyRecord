@@ -398,6 +398,7 @@ export function EditorShell(props: Props) {
 						projection={projection}
 						playback={playback}
 						zoomCommands={zoomCommands}
+						clipCommands={clipCommands}
 						annotationCommands={annotationCommands}
 						effectiveCursorTelemetry={cursor.effectiveCursorTelemetry}
 						effectiveShowCursor={effectiveShowCursor}
@@ -405,6 +406,7 @@ export function EditorShell(props: Props) {
 						handleOpenCropEditor={ui.handleOpenCropEditor}
 						handleSaveAutoCaptionEdit={autoCaption.handleSaveAutoCaptionEdit}
 						handleSelectAnnotation={handleSelectAnnotation}
+						duration={ui.duration}
 						setDuration={ui.setDuration}
 						isPreviewReady={ui.isPreviewReady}
 						setIsPreviewReady={ui.setIsPreviewReady}

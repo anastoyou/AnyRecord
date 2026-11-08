@@ -220,6 +220,8 @@ export function recordCursorMouseDown(button: 1 | 2 | 3) {
 	pushCursorSample(point.cx, point.cy, timeMs, interactionType);
 }
 
+let lastKeypressSampleTimeMs = -Infinity;
+
 export function recordCursorMouseUp() {
 	if (!isCursorCaptureActive || isCursorCapturePaused()) {
 		return;
@@ -231,6 +233,21 @@ export function recordCursorMouseUp() {
 	}
 
 	pushCursorSample(point.cx, point.cy, getCursorCaptureElapsedMs(), "mouseup");
+}
+
+export function recordCursorKeyDown() {
+	if (!isCursorCaptureActive || isCursorCapturePaused()) {
+		return;
+	}
+
+	const timeMs = getCursorCaptureElapsedMs();
+	if (timeMs - lastKeypressSampleTimeMs < 150) {
+		return;
+	}
+	lastKeypressSampleTimeMs = timeMs;
+
+	const point = getNormalizedCursorPoint() ?? { cx: 0.5, cy: 0.5 };
+	pushCursorSample(point.cx, point.cy, timeMs, "keypress");
 }
 
 export async function startInteractionCapture() {
@@ -276,6 +293,10 @@ export async function startInteractionCapture() {
 			recordCursorMouseUp();
 		};
 
+		const onKeyDown = () => {
+			recordCursorKeyDown();
+		};
+
 		const onMouseMove = (event: HookMouseEvent) => {
 			if (process.platform !== "linux" || !isCursorCaptureActive || isCursorCapturePaused()) {
 				return;
@@ -291,6 +312,7 @@ export async function startInteractionCapture() {
 
 		hook.on("mousedown", onMouseDown);
 		hook.on("mouseup", onMouseUp);
+		hook.on("keydown", onKeyDown);
 		if (process.platform === "linux") {
 			hook.on("mousemove", onMouseMove);
 		}
@@ -300,12 +322,14 @@ export async function startInteractionCapture() {
 				if (typeof hook.off === "function") {
 					hook.off("mousedown", onMouseDown);
 					hook.off("mouseup", onMouseUp);
+					hook.off("keydown", onKeyDown);
 					if (process.platform === "linux") {
 						hook.off("mousemove", onMouseMove);
 					}
 				} else if (typeof hook.removeListener === "function") {
 					hook.removeListener("mousedown", onMouseDown);
 					hook.removeListener("mouseup", onMouseUp);
+					hook.removeListener("keydown", onKeyDown);
 					if (process.platform === "linux") {
 						hook.removeListener("mousemove", onMouseMove);
 					}
