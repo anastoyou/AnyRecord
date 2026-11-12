@@ -66,6 +66,12 @@ Add webcam footage as an overlay bubble, position it with presets or custom coor
   <img src="./docs/media/feature2.gif" width="450" alt="AnyRecord webcam overlay demo video">
 </p>
 
+## Real-Time AI Noise Suppression
+Clean background chatter, fan noise, room reverberation, and mechanical keyboard clicks directly on-device using integrated DeepFilterNet & DTLN neural audio worklets. Runs 100% locally with zero latency, adjustable suppression levels, live audio test preview, and automatic offline rendering during export.
+
+## Studio Camera-Only Mode
+Record focused webcam presenter footage without desktop screen clutter. Seamlessly hides window borders, cursor overlays, and PIP controls to give you a full-bleed 4K presentation canvas with dedicated audio controls, auto-captions, and instant aspect ratio toggles (16:9, 9:16, 1:1).
+
 ## Timeline editing built for demos
 Use drag-and-drop timeline tools for zooms, trims, speed regions, annotations, extra audio regions, and crop-aware edits. Save and reopen work as `.recordly` project files.
 

@@ -166,7 +166,7 @@
         <span class="font-semibold text-[15px] tracking-tight text-white flex items-center gap-2">
           AnyRecord
           <span
-            class="text-[10px] font-medium px-1.5 py-0.2 rounded-full bg-white/[0.08] text-apple-muted border border-white/[0.08]">1.4</span>
+            class="text-[10px] font-medium px-1.5 py-0.2 rounded-full bg-[#0071e3]/20 text-[#47a1ff] border border-[#0071e3]/40">v1.4.1</span>
         </span>
       </a>
 
@@ -213,13 +213,16 @@
     <div class="max-w-5xl mx-auto px-4 sm:px-6 relative z-10 text-center">
 
       <!-- Eyebrow Pill -->
-      <div
-        class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/[0.05] border border-white/[0.1] text-[12px] text-[#d2d2d7] font-medium mb-8 backdrop-blur-md">
+      <a href="https://github.com/anastoyou/AnyRecord/releases/tag/v1.4.1" target="_blank" rel="noopener noreferrer"
+        class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/[0.05] hover:bg-white/[0.09] border border-white/[0.1] text-[12px] text-[#d2d2d7] font-medium mb-8 backdrop-blur-md transition-all group">
         <span class="flex h-2 w-2 rounded-full bg-[#30d158]"></span>
-        <span>Open-Source Screen Studio Alternative</span>
+        <span class="text-white font-semibold">AnyRecord v1.4.1 Released</span>
         <span class="text-white/20">|</span>
-        <span class="text-[#2997ff]">100% Free & Offline</span>
-      </div>
+        <span class="text-[#2997ff]">AI Noise Suppression & Studio Camera Mode</span>
+        <svg class="w-3.5 h-3.5 opacity-60 group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+        </svg>
+      </a>
 
       <!-- Display Headline -->
       <h1 class="apple-headline text-5xl sm:text-7xl lg:text-[80px] font-bold tracking-tight max-w-4xl mx-auto">
@@ -455,6 +458,48 @@
           </div>
         </div>
 
+        <!-- Bento 7: AI Noise Suppression (6 cols) -->
+        <div
+          class="md:col-span-6 bento-card rounded-[28px] p-8 sm:p-10 flex flex-col justify-between relative overflow-hidden">
+          <div>
+            <div
+              class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-[11px] font-semibold mb-5">
+              <span>DeepFilterNet AI</span>
+            </div>
+            <h3 class="text-2xl font-bold text-white tracking-tight mb-2">Real-Time AI Noise Suppression</h3>
+            <p class="text-[15px] text-apple-muted leading-relaxed">
+              Eliminate background chatter, fan whirr, room reverberation, and mechanical keyboard clicks in real time. Powered by on-device DeepFilterNet & DTLN neural networks—100% private, zero latency, and baked seamlessly into your exports.
+            </p>
+          </div>
+          <div
+            class="mt-8 pt-6 border-t border-white/[0.06] flex flex-wrap items-center justify-between gap-4 text-[12px] font-mono text-[#a1a1a6]">
+            <span class="px-3 py-1.5 rounded-lg bg-black/50 border border-white/[0.06]">Noise Gate: <strong class="text-emerald-400">DeepFilterNet3</strong></span>
+            <span class="px-3 py-1.5 rounded-lg bg-black/50 border border-white/[0.06]">Attenuation: <strong class="text-white">-35 dB</strong></span>
+            <span class="px-3 py-1.5 rounded-lg bg-black/50 border border-white/[0.06]">Latency: <strong class="text-[#30d158]">0 ms Live</strong></span>
+          </div>
+        </div>
+
+        <!-- Bento 8: Studio Camera Mode (6 cols) -->
+        <div
+          class="md:col-span-6 bento-card rounded-[28px] p-8 sm:p-10 flex flex-col justify-between relative overflow-hidden">
+          <div>
+            <div
+              class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/15 border border-blue-500/30 text-blue-400 text-[11px] font-semibold mb-5">
+              <span>Presenter First</span>
+            </div>
+            <h3 class="text-2xl font-bold text-white tracking-tight mb-2">Studio Camera-Only Mode</h3>
+            <p class="text-[15px] text-apple-muted leading-relaxed">
+              Record pure webcam presenter videos without screen clutter. Automatically hides desktop frames, cursor overlays, and PIP controls to give you a clean, full-bleed 4K canvas with dedicated audio mastering, auto-captions, and instant aspect ratio toggles.
+            </p>
+          </div>
+          <div
+            class="mt-8 pt-6 border-t border-white/[0.06] flex flex-wrap items-center justify-between gap-4 text-[12px] font-mono text-[#a1a1a6]">
+            <span class="px-3 py-1.5 rounded-lg bg-black/50 border border-white/[0.06]">Canvas: <strong class="text-white">Full-Bleed 4K</strong></span>
+            <span class="px-3 py-1.5 rounded-lg bg-black/50 border border-white/[0.06]">Aspect: <strong class="text-[#47a1ff]">16:9 • 9:16 • 1:1</strong></span>
+            <span class="px-3 py-1.5 rounded-lg bg-black/50 border border-white/[0.06]">Layout: <strong class="text-white">Zero Clutter</strong></span>
+          </div>
+        </div>
+
       </div>
     </div>
   </section>
@@ -639,6 +684,18 @@
                 <td class="py-5 px-6 text-apple-muted">✕ Not Available</td>
               </tr>
               <tr>
+                <td class="py-5 px-6 text-white font-medium">Real-Time AI Noise Suppression</td>
+                <td class="py-5 px-6 font-semibold text-[#30d158] bg-[#0071e3]/[0.07] border-x border-[#0071e3]/20">✓ DeepFilterNet AI (Offline)</td>
+                <td class="py-5 px-6 text-apple-muted">✕ Basic / Cloud</td>
+                <td class="py-5 px-6 text-apple-muted">✕ Manual Filters Only</td>
+              </tr>
+              <tr>
+                <td class="py-5 px-6 text-white font-medium">Studio Camera-Only Mode</td>
+                <td class="py-5 px-6 font-semibold text-white bg-[#0071e3]/[0.07] border-x border-[#0071e3]/20">✓ Full-Bleed 4K Studio</td>
+                <td class="py-5 px-6 text-apple-muted">✕ Screen Overlay Only</td>
+                <td class="py-5 px-6 text-apple-muted">✕ Complex Scene Setup</td>
+              </tr>
+              <tr>
                 <td class="py-5 px-6 text-white font-medium">Privacy & Telemetry</td>
                 <td class="py-5 px-6 font-semibold text-[#30d158] bg-[#0071e3]/[0.07] border-x border-[#0071e3]/20">✓
                   Offline-First, No Tracking</td>
@@ -725,9 +782,12 @@
     <div class="max-w-6xl mx-auto px-4 sm:px-6">
 
       <div class="text-center max-w-3xl mx-auto mb-16">
-        <p class="text-[13px] font-semibold text-[#2997ff] uppercase tracking-widest mb-3">Get Started</p>
+        <div class="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-[#30d158]/10 border border-[#30d158]/25 text-[#30d158] text-[11px] font-semibold mb-3">
+          <span class="w-1.5 h-1.5 rounded-full bg-[#30d158]"></span>
+          <span>v1.4.1 Latest Stable Release</span>
+        </div>
         <h2 class="apple-headline text-4xl sm:text-5xl font-bold text-white">Download AnyRecord.</h2>
-        <p class="mt-4 text-apple-muted text-[17px]">Native performance across macOS, Windows, and Linux.</p>
+        <p class="mt-4 text-apple-muted text-[17px]">Native performance across macOS, Windows, and Linux. 100% Free & Open Source.</p>
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
