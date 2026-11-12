@@ -1,3 +1,9 @@
+## What's Changed in AnyRecord v1.4.3
+
+### ☁️ Cloudinary & Neon Cloud Storage Integration
+- **Build-time Database Configuration**: Injected `CLOUDINARY_DATABASE_URL` and `CLOUDINARY_TOKEN_KEY` into the packaged Electron build and CI/CD workflows.
+- **Packaged Standalone Support**: Enables the Cloud tab and Cloudinary OAuth connection in distributed desktop releases without requiring a local `.env` file.
+
 ## What's Changed in AnyRecord v1.4.2
 
 ### ☁️ Cloud Sign-In & Supabase Integration

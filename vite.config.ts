@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import react from "@vitejs/plugin-react";
-import { defineConfig, type Plugin } from "vite";
+import { defineConfig, loadEnv, type Plugin } from "vite";
 import electron from "vite-plugin-electron/simple";
 
 function crossPlatformNoiseSuppressionVitePlugin(): Plugin {
@@ -137,26 +137,48 @@ function electronMainCjsGuardPlugin(): Plugin {
 }
 
 // https://vitejs.dev/config/
-export default defineConfig(({ mode }) => ({
-	plugins: [
-		react(),
-		crossPlatformNoiseSuppressionVitePlugin(),
-		...(mode === "ui" ||
-		process.env.ANYRECORD_RENDERER_ONLY === "1" ||
-		process.env.RECORDLY_RENDERER_ONLY === "1"
-			? []
-			: [
-					electron({
-						main: {
-							// Shortcut of `build.lib.entry`.
-							entry: "electron/main.ts",
-							vite: {
-								build: {
-									lib: {
-										entry: "electron/main.ts",
-										formats: ["cjs"],
-										fileName: (_format, entryName) => `${entryName}.cjs`,
+export default defineConfig(({ mode }) => {
+	const env = loadEnv(mode, process.cwd(), "");
+	return {
+		plugins: [
+			react(),
+			crossPlatformNoiseSuppressionVitePlugin(),
+			...(mode === "ui" ||
+			process.env.ANYRECORD_RENDERER_ONLY === "1" ||
+			process.env.RECORDLY_RENDERER_ONLY === "1"
+				? []
+				: [
+						electron({
+							main: {
+								// Shortcut of `build.lib.entry`.
+								entry: "electron/main.ts",
+								vite: {
+									define: {
+										"process.env.CLOUDINARY_DATABASE_URL": JSON.stringify(
+											process.env.CLOUDINARY_DATABASE_URL || env.CLOUDINARY_DATABASE_URL || "",
+										),
+										"process.env.NEON_DATABASE_URL": JSON.stringify(
+											process.env.NEON_DATABASE_URL || env.NEON_DATABASE_URL || "",
+										),
+										"process.env.CLOUDINARY_TOKEN_KEY": JSON.stringify(
+											process.env.CLOUDINARY_TOKEN_KEY || env.CLOUDINARY_TOKEN_KEY || "",
+										),
+										"process.env.CLOUDINARY_CLIENT_ID": JSON.stringify(
+											process.env.CLOUDINARY_CLIENT_ID || env.CLOUDINARY_CLIENT_ID || "",
+										),
+										"process.env.CLOUDINARY_CLIENT_SECRET": JSON.stringify(
+											process.env.CLOUDINARY_CLIENT_SECRET || env.CLOUDINARY_CLIENT_SECRET || "",
+										),
+										"process.env.CLOUDINARY_OAUTH_ISSUER": JSON.stringify(
+											process.env.CLOUDINARY_OAUTH_ISSUER || env.CLOUDINARY_OAUTH_ISSUER || "",
+										),
 									},
+									build: {
+										lib: {
+											entry: "electron/main.ts",
+											formats: ["cjs"],
+											fileName: (_format, entryName) => `${entryName}.cjs`,
+										},
 									rollupOptions: {
 										external: ["ffmpeg-static", "uiohook-napi"],
 										output: {
@@ -227,4 +249,5 @@ export default defineConfig(({ mode }) => ({
 		},
 		chunkSizeWarningLimit: 1000,
 	},
-}));
+};
+});

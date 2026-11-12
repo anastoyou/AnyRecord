@@ -81,7 +81,32 @@ function loadDotEnvVars(): Record<string, string> {
 	return parsed;
 }
 
+const COMPILED_CLOUDINARY_DATABASE_URL = process.env.CLOUDINARY_DATABASE_URL;
+const COMPILED_NEON_DATABASE_URL = process.env.NEON_DATABASE_URL;
+const COMPILED_CLOUDINARY_TOKEN_KEY = process.env.CLOUDINARY_TOKEN_KEY;
+const COMPILED_CLOUDINARY_CLIENT_ID = process.env.CLOUDINARY_CLIENT_ID;
+const COMPILED_CLOUDINARY_CLIENT_SECRET = process.env.CLOUDINARY_CLIENT_SECRET;
+const COMPILED_CLOUDINARY_OAUTH_ISSUER = process.env.CLOUDINARY_OAUTH_ISSUER;
+
 function getEnvVar(name: string): string | undefined {
+	if (name === "CLOUDINARY_DATABASE_URL" && COMPILED_CLOUDINARY_DATABASE_URL?.trim()) {
+		return COMPILED_CLOUDINARY_DATABASE_URL.trim();
+	}
+	if (name === "NEON_DATABASE_URL" && COMPILED_NEON_DATABASE_URL?.trim()) {
+		return COMPILED_NEON_DATABASE_URL.trim();
+	}
+	if (name === "CLOUDINARY_TOKEN_KEY" && COMPILED_CLOUDINARY_TOKEN_KEY?.trim()) {
+		return COMPILED_CLOUDINARY_TOKEN_KEY.trim();
+	}
+	if (name === "CLOUDINARY_CLIENT_ID" && COMPILED_CLOUDINARY_CLIENT_ID?.trim()) {
+		return COMPILED_CLOUDINARY_CLIENT_ID.trim();
+	}
+	if (name === "CLOUDINARY_CLIENT_SECRET" && COMPILED_CLOUDINARY_CLIENT_SECRET?.trim()) {
+		return COMPILED_CLOUDINARY_CLIENT_SECRET.trim();
+	}
+	if (name === "CLOUDINARY_OAUTH_ISSUER" && COMPILED_CLOUDINARY_OAUTH_ISSUER?.trim()) {
+		return COMPILED_CLOUDINARY_OAUTH_ISSUER.trim();
+	}
 	const fromProcess = process.env[name]?.trim();
 	if (fromProcess) return fromProcess;
 	const fromDotEnv = loadDotEnvVars()[name]?.trim();
