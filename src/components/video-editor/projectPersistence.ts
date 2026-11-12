@@ -69,6 +69,8 @@ import {
 	type ZoomMotionBlurTuning,
 	type ZoomRegion,
 	type ZoomTransitionEasing,
+	type StudioLightRole,
+	type StudioLightingPresetId,
 } from "./types";
 import { convertLegacyWebcamRadiusToRoundness, normalizeWebcamCropRegion } from "./webcamOverlay";
 
@@ -1247,7 +1249,7 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 							name: typeof l.name === "string" ? l.name : `Light ${idx + 1}`,
 							role: (["key", "fill", "rim", "accent", "custom"].includes(l.role)
 								? l.role
-								: "custom") as any,
+								: "custom") as StudioLightRole,
 							enabled: typeof l.enabled === "boolean" ? l.enabled : true,
 							x: isFiniteNumber(l.x) ? clamp(l.x, 0, 1) : 0.5,
 							y: isFiniteNumber(l.y) ? clamp(l.y, 0, 1) : 0.5,
@@ -1278,7 +1280,7 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 						"custom",
 					].includes(sl.presetId)
 						? sl.presetId
-						: "three-point-classic") as any,
+						: "three-point-classic") as StudioLightingPresetId,
 					lights: lights.length > 0 ? lights : DEFAULT_STUDIO_LIGHTING_SETTINGS.lights,
 					ambientIntensity: isFiniteNumber(sl.ambientIntensity)
 						? clamp(sl.ambientIntensity, 0, 1)

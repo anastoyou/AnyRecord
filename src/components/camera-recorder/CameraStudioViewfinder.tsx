@@ -157,7 +157,9 @@ export function CameraStudioViewfinder({
 			dragStartRef.current = null;
 			try {
 				e.currentTarget.releasePointerCapture(e.pointerId);
-			} catch { }
+			} catch {
+				/* ignore releasePointerCapture error */
+			}
 		}
 	};
 

@@ -2840,7 +2840,7 @@ export function SettingsPanel({
 											<span className="text-muted-foreground">Target Audio:</span>
 											<Select
 												value={portion.trackId || portion.targetTrack || "all"}
-												onValueChange={(val: any) =>
+												onValueChange={(val: string) =>
 													onAudioPortionUpdate?.(portion.id, {
 														trackId: val,
 														targetTrack: val,
@@ -3158,11 +3158,11 @@ export function SettingsPanel({
 			<GestureSectionPanel
 				t={t}
 				settings={gestureSettings ?? DEFAULT_GESTURE_TRACKING_SETTINGS}
-				onSettingsChange={onGestureSettingsChange ?? (() => { })}
+				onSettingsChange={onGestureSettingsChange ?? (() => { /* no-op */ })}
 				onUpdateDefaultAttachment={onUpdateDefaultAttachment}
 				gestureRegions={gestureRegions}
 				onUpdateRegions={onUpdateGestureRegions}
-				onAnalyzeWebcam={onAnalyzeWebcamGestures ?? (async () => { })}
+				onAnalyzeWebcam={onAnalyzeWebcamGestures ?? (async () => { /* no-op */ })}
 				isAnalyzing={isAnalyzingGestures}
 				analysisProgress={gestureAnalysisProgress}
 				webcamSourcePath={webcamSourcePath ?? webcam?.sourcePath ?? null}
@@ -3177,8 +3177,8 @@ export function SettingsPanel({
 			<GestureItemPanel
 				t={t}
 				region={selectedGesture}
-				onRegionChange={onUpdateGestureRegion ?? (() => { })}
-				onDeleteRegion={onDeleteGestureRegion ?? (() => { })}
+				onRegionChange={onUpdateGestureRegion ?? (() => { /* no-op */ })}
+				onDeleteRegion={onDeleteGestureRegion ?? (() => { /* no-op */ })}
 				onBack={onBackToGestures}
 			/>
 		) : (

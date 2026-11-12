@@ -295,7 +295,9 @@ export async function generateCaptionsWithGoogleSpeech(options: {
 		} catch (error) {
 			console.warn(`[google-speech] Error processing chunk ${i}:`, error);
 		} finally {
-			await fs.rm(chunkFlacPath, { force: true }).catch(() => {});
+			await fs.rm(chunkFlacPath, { force: true }).catch(() => {
+				/* ignore cleanup error */
+			});
 		}
 	}
 

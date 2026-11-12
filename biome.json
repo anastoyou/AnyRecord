@@ -10,6 +10,7 @@
 			"!!**/dist-ssr",
 			"!!**/release",
 			"!!**/.tmp",
+			"!!**/docs",
 			"!!**/electron/native/**/build"
 		]
 	},

@@ -512,12 +512,12 @@ export const CaptionEditorStudio: React.FC<CaptionEditorStudioProps> = ({
 											cues={cues}
 											selectedCaptionId={activeCueId}
 											currentTimeMs={currentTimeMs}
-											onBeginCaptionEdit={onBeginCaptionEdit ?? (() => { })}
-											onCaptionTextEdit={onCaptionTextEdit ?? (() => { })}
-											onCaptionRetime={onCaptionRetime ?? (() => { })}
-											onCaptionSplit={onCaptionSplit ?? (() => { })}
-											onCaptionMerge={onCaptionMerge ?? (() => { })}
-											onCaptionDelete={onCaptionDelete ?? (() => { })}
+											onBeginCaptionEdit={onBeginCaptionEdit ?? (() => { /* no-op */ })}
+											onCaptionTextEdit={onCaptionTextEdit ?? (() => { /* no-op */ })}
+											onCaptionRetime={onCaptionRetime ?? (() => { /* no-op */ })}
+											onCaptionSplit={onCaptionSplit ?? (() => { /* no-op */ })}
+											onCaptionMerge={onCaptionMerge ?? (() => { /* no-op */ })}
+											onCaptionDelete={onCaptionDelete ?? (() => { /* no-op */ })}
 										/>
 									</div>
 								)}

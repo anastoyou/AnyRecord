@@ -522,6 +522,7 @@ export class StudioLightingEngine {
 		}
 
 		gl.viewport(0, 0, width, height);
+		// biome-ignore lint/correctness/useHookAtTopLevel: WebGL method, not a React hook
 		gl.useProgram(this.program);
 
 		// Bind texture

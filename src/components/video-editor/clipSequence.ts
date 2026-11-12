@@ -111,8 +111,10 @@ export function rippleRegions<T extends { startMs: number; endMs: number }>(
 		const startMs = Math.min(...retainedSpans.map((span) => span.startMs));
 		const endMs = Math.max(...retainedSpans.map((span) => span.endMs));
 		const updated: T = { ...region, startMs, endMs };
-		if (Array.isArray((region as any).samples)) {
-			(updated as any).samples = (region as any).samples.map((sample: any) => {
+		const candidate = region as { samples?: unknown };
+		if (Array.isArray(candidate.samples)) {
+			const samples = candidate.samples as Array<Record<string, unknown>>;
+			(updated as { samples?: unknown }).samples = samples.map((sample) => {
 				if (typeof sample?.tMs === "number") {
 					return {
 						...sample,
