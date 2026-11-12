@@ -203,7 +203,7 @@ jobs:
     name: Build macOS arm64
     needs: prepare-release
     if: needs.prepare-release.outputs.release_scope == 'all'
-    runs-on: macos-14
+    runs-on: macos-15
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       APPLE_ID: ${{ secrets.APPLE_ID }}
