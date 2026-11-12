@@ -1,3 +1,9 @@
+## What's Changed in AnyRecord v1.4.2
+
+### ☁️ Cloud Sign-In & Supabase Integration
+- **Build Workflow Injection**: Supabase authentication credentials are now injected into CI/CD build workflows across Windows, macOS, and Linux packages.
+- **Enabled OAuth Providers**: Full support for Google and GitHub social logins and email authentication out of the box in packaged desktop releases.
+
 ## What's Changed in AnyRecord v1.4.1
 
 ### 🎙️ AI-Powered Noise Suppression
