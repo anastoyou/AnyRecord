@@ -1,8 +1,90 @@
 import { spawnSync } from "node:child_process";
+import fs from "node:fs";
 import path from "node:path";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
 import electron from "vite-plugin-electron/simple";
+
+function crossPlatformNoiseSuppressionVitePlugin(): Plugin {
+	const distDir = path.resolve(__dirname, "node_modules/@workadventure/noise-suppression/dist");
+	const deepFilterPrefix = "/__workadventure_noise_suppression/deepfilternet/";
+	const dtlnAssets = [
+		{
+			expression: 'new URL("assets/audio-worklet-processor.js", import.meta.url).href',
+			devUrl: "/node_modules/@workadventure/noise-suppression/dist/assets/audio-worklet-processor.js",
+			filePath: path.join(distDir, "assets/audio-worklet-processor.js"),
+			contentType: "text/javascript",
+		},
+	];
+	const deepFilterAssets = [
+		{
+			expression: 'new URL("assets/deepfilternet-worklet-processor.js", import.meta.url).href',
+			devUrl: `${deepFilterPrefix}worklet-processor.js`,
+			filePath: path.join(distDir, "assets/deepfilternet-worklet-processor.js"),
+			contentType: "text/javascript",
+		},
+		{
+			expression: 'new URL("assets/deepfilternet/df_bg.wasm", import.meta.url).href',
+			devUrl: `${deepFilterPrefix}df_bg.wasm`,
+			filePath: path.join(distDir, "assets/deepfilternet/df_bg.wasm"),
+			contentType: "application/wasm",
+		},
+		{
+			expression: 'new URL("assets/deepfilternet/DeepFilterNet3_onnx.tar.gz", import.meta.url).href',
+			devUrl: `${deepFilterPrefix}DeepFilterNet3_onnx.tar.gz`,
+			filePath: path.join(distDir, "assets/deepfilternet/DeepFilterNet3_onnx.tar.gz"),
+			contentType: "application/gzip",
+		},
+	];
+
+	return {
+		name: "noise-suppression-audio-worklet",
+		apply: "serve",
+		config() {
+			return {
+				optimizeDeps: {
+					exclude: [
+						"@workadventure/noise-suppression",
+						"@workadventure/noise-suppression/audio-worklet",
+						"@workadventure/noise-suppression/deepfilternet",
+					],
+				},
+			};
+		},
+		configureServer(server) {
+			for (const asset of [...dtlnAssets, ...deepFilterAssets]) {
+				server.middlewares.use(asset.devUrl, (_req, res, next) => {
+					res.statusCode = 200;
+					res.setHeader("Content-Type", asset.contentType);
+					res.setHeader("Cache-Control", "no-cache");
+					const stream = fs.createReadStream(asset.filePath);
+					stream.on("error", next);
+					stream.pipe(res);
+				});
+			}
+		},
+		transform(code, id) {
+			const cleanId = id.replace(/\\/g, "/").split("?")[0] ?? "";
+			const replacements = cleanId.endsWith(
+				"/@workadventure/noise-suppression/dist/audio-worklet.js",
+			)
+				? dtlnAssets
+				: cleanId.endsWith("/@workadventure/noise-suppression/dist/deepfilternet.js")
+					? deepFilterAssets
+					: null;
+			if (!replacements) {
+				return null;
+			}
+			let rewritten = code;
+			for (const item of replacements) {
+				if (rewritten.includes(item.expression)) {
+					rewritten = rewritten.replace(item.expression, JSON.stringify(item.devUrl));
+				}
+			}
+			return { code: rewritten, map: null };
+		},
+	};
+}
 
 function electronMainCjsOutputPlugin(): Plugin {
 	return {
@@ -58,6 +140,7 @@ function electronMainCjsGuardPlugin(): Plugin {
 export default defineConfig(({ mode }) => ({
 	plugins: [
 		react(),
+		crossPlatformNoiseSuppressionVitePlugin(),
 		...(mode === "ui" ||
 		process.env.ANYRECORD_RENDERER_ONLY === "1" ||
 		process.env.RECORDLY_RENDERER_ONLY === "1"

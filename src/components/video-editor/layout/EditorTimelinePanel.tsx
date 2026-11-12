@@ -29,6 +29,9 @@ type Props = {
 	videoSourcePath: string | null;
 	cameraVideoPath?: string | null;
 	hasCameraTrack?: boolean;
+	showCameraAudioTrack?: boolean;
+	cameraAudioVolume?: number;
+	cameraAudioMuted?: boolean;
 	cursorTelemetrySourcePath: string | null;
 	normalizedCursorTelemetry: ReturnType<typeof useTimelineState>["cursorTelemetry"];
 	autoSuggestZoomsTrigger: number;
@@ -56,6 +59,9 @@ export function EditorTimelinePanel(props: Props) {
 		videoSourcePath,
 		cameraVideoPath,
 		hasCameraTrack = false,
+		showCameraAudioTrack = false,
+		cameraAudioVolume = 1,
+		cameraAudioMuted = false,
 		cursorTelemetrySourcePath,
 		normalizedCursorTelemetry,
 		autoSuggestZoomsTrigger,
@@ -102,6 +108,9 @@ export function EditorTimelinePanel(props: Props) {
 				onSelectClip={clipCommands.handleSelectClip}
 				hasCameraTrack={hasCameraTrack}
 				cameraVideoPath={cameraVideoPath}
+				showCameraAudioTrack={showCameraAudioTrack}
+				cameraAudioVolume={cameraAudioVolume}
+				cameraAudioMuted={cameraAudioMuted}
 				cameraRegions={cameraCommands?.cameraRegions}
 				onCameraSplit={cameraCommands?.handleCameraSplit}
 				onCameraSpanChange={cameraCommands?.handleCameraSpanChange}

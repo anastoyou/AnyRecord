@@ -4,6 +4,7 @@ import type {
 	CaptionCue,
 	ClipRegion,
 	SpeedRegion,
+	WebcamOverlaySettings,
 	ZoomRegion,
 } from "./types";
 
@@ -14,6 +15,7 @@ export type EditorHistorySnapshot = {
 	annotationRegions: AnnotationRegion[];
 	audioRegions: AudioRegion[];
 	autoCaptions: CaptionCue[];
+	webcamVisibleRanges?: WebcamOverlaySettings["visibleRanges"];
 	selectedZoomId: string | null;
 	selectedClipId: string | null;
 	selectedAnnotationId: string | null;
@@ -69,13 +71,8 @@ function areDeepEqual(left: unknown, right: unknown): boolean {
 		return false;
 	}
 
-	const leftKeys = Object.keys(left);
-	const rightKeys = Object.keys(right);
-	if (leftKeys.length !== rightKeys.length) {
-		return false;
-	}
-
-	return leftKeys.every((key) => key in right && areDeepEqual(left[key], right[key]));
+	const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
+	return Array.from(keys).every((key) => areDeepEqual(left[key], right[key]));
 }
 
 export function areEditorHistorySnapshotsEqual(

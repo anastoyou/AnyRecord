@@ -160,6 +160,17 @@ export function useInitialEditorSource({
 				if (sessionResult?.success && sessionResult.session?.videoPath) {
 					const sourcePath = fromFileUrl(sessionResult.session.videoPath);
 					const sourceUrl = await resolveVideoUrl(sourcePath);
+					const latestSessionResult =
+						await window.electronAPI.getCurrentRecordingSession?.();
+					const activeSession =
+						latestSessionResult?.success &&
+						latestSessionResult.session?.videoPath &&
+						fromFileUrl(latestSessionResult.session.videoPath) === sourcePath
+							? latestSessionResult.session
+							: sessionResult.session;
+					const resolvedWebcamPath = activeSession?.webcamPath
+						? fromFileUrl(activeSession.webcamPath)
+						: null;
 					project.setVideoSourcePath(sourcePath);
 					project.setVideoPath(sourceUrl);
 					project.setCurrentProjectPath(null);
@@ -167,14 +178,14 @@ export function useInitialEditorSource({
 					resetSourceScopedEditorState();
 					pendingFreshRecordingAutoZoomPathRef.current =
 						appearance.autoApplyFreshRecordingAutoZooms ? sourceUrl : null;
-					applySessionPresentation(sessionResult.session);
+					applySessionPresentation(activeSession);
 					appearance.setWebcam((previous) => ({
 						...previous,
 						visibleRanges: undefined,
-						enabled: Boolean(sessionResult.session?.webcamPath),
-						sourcePath: sessionResult.session?.webcamPath ?? null,
+						enabled: Boolean(resolvedWebcamPath),
+						sourcePath: resolvedWebcamPath,
 						timeOffsetMs:
-							sessionResult.session?.timeOffsetMs ?? DEFAULT_WEBCAM_TIME_OFFSET_MS,
+							activeSession?.timeOffsetMs ?? DEFAULT_WEBCAM_TIME_OFFSET_MS,
 					}));
 					return;
 				}
@@ -216,22 +227,46 @@ export function useInitialEditorSource({
 	]);
 
 	useEffect(() => {
-		if (!window.electronAPI.onRecordingSessionChanged) return;
-		return window.electronAPI.onRecordingSessionChanged((session) => {
+		const applyRecordingSession = (
+			session:
+				| {
+						videoPath?: string | null;
+						webcamPath?: string | null;
+						timeOffsetMs?: number;
+				  }
+				| null
+				| undefined,
+		) => {
 			const sessionSourcePath = session?.videoPath ? fromFileUrl(session.videoPath) : null;
 			const webcamPath = session?.webcamPath ? fromFileUrl(session.webcamPath) : null;
-			if (!session || sessionSourcePath !== videoSourcePath) return;
-			appearance.setWebcam((previous) => ({
-				...previous,
-				visibleRanges: undefined,
-				enabled: Boolean(webcamPath),
-				sourcePath: webcamPath,
-				timeOffsetMs: webcamPath
-					? (session.timeOffsetMs ?? previous.timeOffsetMs)
-					: DEFAULT_WEBCAM_TIME_OFFSET_MS,
-			}));
+			if (!session || !videoSourcePath || sessionSourcePath !== videoSourcePath) return;
+			appearance.setWebcam((previous) => {
+				if (previous.sourcePath === webcamPath && previous.enabled === Boolean(webcamPath)) {
+					return previous;
+				}
+				return {
+					...previous,
+					visibleRanges: undefined,
+					enabled: Boolean(webcamPath),
+					sourcePath: webcamPath,
+					timeOffsetMs: webcamPath
+						? (session.timeOffsetMs ?? previous.timeOffsetMs)
+						: DEFAULT_WEBCAM_TIME_OFFSET_MS,
+				};
+			});
 			timeline.setSourceAudioFallbackRefreshKey((key) => key + 1);
-		});
+		};
+
+		if (videoSourcePath && window.electronAPI.getCurrentRecordingSession) {
+			void window.electronAPI.getCurrentRecordingSession().then((result) => {
+				if (result?.success && result.session) {
+					applyRecordingSession(result.session);
+				}
+			});
+		}
+
+		if (!window.electronAPI.onRecordingSessionChanged) return;
+		return window.electronAPI.onRecordingSessionChanged(applyRecordingSession);
 	}, [videoSourcePath, appearance.setWebcam, timeline.setSourceAudioFallbackRefreshKey]);
 
 	useEffect(() => {

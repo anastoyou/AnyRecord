@@ -5,11 +5,14 @@ const WINDOWS_MIC_CAPTURE_UNAVAILABLE_MARKERS = [
 export const WINDOWS_MIC_CAPTURE_MODE_ENV = "RECORDLY_WINDOWS_MIC_CAPTURE";
 
 export function shouldStartWindowsBrowserMicrophoneFallback(
-	options?: { capturesMicrophone?: boolean },
+	options?: { capturesMicrophone?: boolean; preferBrowserMicrophone?: boolean },
 	env: NodeJS.ProcessEnv = process.env,
 ) {
 	if (!options?.capturesMicrophone) {
 		return false;
+	}
+	if (options?.preferBrowserMicrophone) {
+		return true;
 	}
 
 	const mode = env[WINDOWS_MIC_CAPTURE_MODE_ENV]?.trim().toLowerCase();
@@ -20,7 +23,7 @@ export function shouldStartWindowsBrowserMicrophoneFallback(
 
 export function shouldUseWindowsBrowserMicrophoneFallback(
 	captureOutput: string,
-	options?: { capturesMicrophone?: boolean },
+	options?: { capturesMicrophone?: boolean; preferBrowserMicrophone?: boolean },
 	env: NodeJS.ProcessEnv = process.env,
 ) {
 	return (

@@ -60,6 +60,31 @@ export function deleteCameraRegionList(current: CameraRegion[], id: string): Cam
 	return current.filter((r) => r.id !== id);
 }
 
+export function deriveCameraRegionsFromVisibleRanges(
+	hasWebcam: boolean,
+	visibleRanges: WebcamOverlaySettings["visibleRanges"],
+	duration: number,
+): CameraRegion[] {
+	if (!hasWebcam) {
+		return [];
+	}
+
+	if (visibleRanges && Array.isArray(visibleRanges)) {
+		return visibleRanges.map((range, index) => ({
+			id: range.id || `camera-${index + 1}`,
+			startMs: range.startMs,
+			endMs: range.endMs,
+		}));
+	}
+
+	if (duration > 0) {
+		const totalMs = Math.round(duration * 1000);
+		return [{ id: "camera-0", startMs: 0, endMs: totalMs }];
+	}
+
+	return [];
+}
+
 export function useCameraRegionCommands({
 	hasWebcam,
 	webcam,
@@ -81,29 +106,39 @@ export function useCameraRegionCommands({
 	useEffect(() => {
 		if (!hasWebcam) {
 			setCameraRegions([]);
+			setSelectedCameraId(null);
 			return;
 		}
 
 		if (webcam.visibleRanges && Array.isArray(webcam.visibleRanges)) {
-			setCameraRegions(
-				webcam.visibleRanges.map((range, index) => ({
-					id: range.id || `camera-${index + 1}`,
-					startMs: range.startMs,
-					endMs: range.endMs,
-				})),
+			const mapped = deriveCameraRegionsFromVisibleRanges(
+				hasWebcam,
+				webcam.visibleRanges,
+				duration,
+			);
+			const maxExistingId = mapped.reduce((max, region) => {
+				const match = /^camera-(\d+)$/.exec(region.id);
+				return match ? Math.max(max, Number(match[1])) : max;
+			}, 0);
+			nextCameraIdRef.current = Math.max(nextCameraIdRef.current, maxExistingId + 1);
+			setCameraRegions(mapped);
+			setSelectedCameraId((current) =>
+				current && mapped.some((region) => region.id === current) ? current : null,
 			);
 		} else if (duration > 0) {
 			const totalMs = Math.round(duration * 1000);
 			setCameraRegions((current) => {
-				if (current.length === 0) {
-					return [{ id: "camera-0", startMs: 0, endMs: totalMs }];
+				if (
+					current.length === 1 &&
+					current[0].id === "camera-0" &&
+					current[0].startMs === 0 &&
+					current[0].endMs === totalMs
+				) {
+					return current;
 				}
-				// Extend single full-track item if video metadata just finished loading
-				if (current.length === 1 && current[0].id === "camera-0" && current[0].startMs === 0) {
-					return [{ id: "camera-0", startMs: 0, endMs: totalMs }];
-				}
-				return current;
+				return [{ id: "camera-0", startMs: 0, endMs: totalMs }];
 			});
+			setSelectedCameraId((current) => (current === "camera-0" ? current : null));
 		}
 	}, [hasWebcam, webcam.visibleRanges, duration]);
 

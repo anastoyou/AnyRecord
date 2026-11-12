@@ -1329,6 +1329,17 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 				typeof webcam.muted === "boolean"
 					? webcam.muted
 					: (DEFAULT_WEBCAM_OVERLAY.muted ?? false),
+			showAudioOnTimeline:
+				typeof webcam.showAudioOnTimeline === "boolean"
+					? webcam.showAudioOnTimeline
+					: (DEFAULT_WEBCAM_OVERLAY.showAudioOnTimeline ?? false),
+			noiseSuppressionEnabled:
+				typeof webcam.noiseSuppressionEnabled === "boolean"
+					? webcam.noiseSuppressionEnabled
+					: (DEFAULT_WEBCAM_OVERLAY.noiseSuppressionEnabled ?? false),
+			noiseSuppressionLevel: isFiniteNumber(webcam.noiseSuppressionLevel)
+				? clamp(Math.round(webcam.noiseSuppressionLevel), 0, 100)
+				: (DEFAULT_WEBCAM_OVERLAY.noiseSuppressionLevel ?? 75),
 			fixed:
 				typeof webcam.fixed === "boolean"
 					? webcam.fixed

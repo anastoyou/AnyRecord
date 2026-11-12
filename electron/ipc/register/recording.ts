@@ -727,7 +727,10 @@ export function registerRecordingHandlers(
 				const timestamp = Date.now();
 				const outputPath = path.join(recordingsDir, `recording-${timestamp}.mp4`);
 				const capturesSystemAudio = Boolean(options?.capturesSystemAudio);
-				const capturesMicrophone = Boolean(options?.capturesMicrophone);
+				const preferBrowserMicrophone = Boolean(options?.preferBrowserMicrophone);
+				const capturesMicrophone = Boolean(
+					options?.capturesMicrophone && !preferBrowserMicrophone,
+				);
 				const systemAudioOutputPath = capturesSystemAudio
 					? path.join(recordingsDir, `recording-${timestamp}.system.m4a`)
 					: null;
@@ -822,9 +825,9 @@ export function registerRecordingHandlers(
 				// If the native helper reported MICROPHONE_CAPTURE_UNAVAILABLE, it started
 				// capture without microphone.  Clear the mic path so the renderer can fall
 				// back to a browser-side sidecar recording for the microphone track.
-				const micUnavailableNatively = nativeCaptureOutputBuffer.includes(
-					"MICROPHONE_CAPTURE_UNAVAILABLE",
-				);
+				const micUnavailableNatively =
+					preferBrowserMicrophone ||
+					nativeCaptureOutputBuffer.includes("MICROPHONE_CAPTURE_UNAVAILABLE");
 				if (micUnavailableNatively) {
 					setNativeCaptureMicrophonePath(null);
 				}

@@ -90,6 +90,8 @@ export function useEditorProjectController(input: Input) {
 	});
 	const history = useEditorHistory({
 		timeline: input.timeline,
+		webcamVisibleRanges: input.appearance.webcam.visibleRanges,
+		setWebcam: input.appearance.setWebcam,
 		nextZoomIdRef: input.nextZoomIdRef,
 		nextClipIdRef: input.nextClipIdRef,
 		nextAnnotationIdRef: input.nextAnnotationIdRef,

@@ -125,4 +125,31 @@ describe("editorHistory", () => {
 		expect(snapshot.selectedZoomId).toBe("first");
 		expect(areEditorHistorySnapshotsEqual(snapshot, createSnapshot("first"))).toBe(true);
 	});
+
+	it("tracks webcamVisibleRanges through cut, undo back to undefined, and redo", () => {
+		const stack = createEditorHistoryStack();
+		const initialSnapshot: EditorHistorySnapshot = {
+			...createSnapshot(null),
+			webcamVisibleRanges: undefined,
+		};
+		const cutSnapshot: EditorHistorySnapshot = {
+			...createSnapshot(null),
+			webcamVisibleRanges: [
+				{ id: "camera-1", startMs: 0, endMs: 4000 },
+				{ id: "camera-2", startMs: 4000, endMs: 10000 },
+			],
+		};
+
+		expect(recordEditorHistorySnapshot(stack, initialSnapshot)).toBe("initialized");
+		expect(recordEditorHistorySnapshot(stack, cutSnapshot)).toBe("recorded");
+
+		const undone = undoEditorHistoryStack(stack, cutSnapshot);
+		expect(undone?.webcamVisibleRanges).toBeUndefined();
+
+		const redone = redoEditorHistoryStack(stack, initialSnapshot);
+		expect(redone?.webcamVisibleRanges).toEqual([
+			{ id: "camera-1", startMs: 0, endMs: 4000 },
+			{ id: "camera-2", startMs: 4000, endMs: 10000 },
+		]);
+	});
 });

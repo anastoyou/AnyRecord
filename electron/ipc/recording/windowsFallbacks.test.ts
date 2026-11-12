@@ -53,6 +53,21 @@ describe("shouldUseWindowsBrowserMicrophoneFallback", () => {
 				{ [WINDOWS_MIC_CAPTURE_MODE_ENV]: "browser" },
 			),
 		).toBe(false);
+		expect(
+			shouldStartWindowsBrowserMicrophoneFallback(
+				{ capturesMicrophone: false, preferBrowserMicrophone: true },
+				{},
+			),
+		).toBe(false);
+	});
+
+	it("forces browser microphone fallback when preferBrowserMicrophone is true", () => {
+		expect(
+			shouldStartWindowsBrowserMicrophoneFallback(
+				{ capturesMicrophone: true, preferBrowserMicrophone: true },
+				{},
+			),
+		).toBe(true);
 	});
 
 	it("returns true when native Windows mic initialization fails", () => {

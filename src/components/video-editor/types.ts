@@ -184,6 +184,9 @@ export interface WebcamOverlaySettings {
 	studioLighting?: StudioLightingSettings;
 	volume?: number;
 	muted?: boolean;
+	showAudioOnTimeline?: boolean;
+	noiseSuppressionEnabled?: boolean;
+	noiseSuppressionLevel?: number;
 	fixed?: boolean;
 	fixedHeightPercent?: number;
 }
@@ -234,6 +237,9 @@ export const DEFAULT_WEBCAM_POSITION_Y = 1;
 export const DEFAULT_WEBCAM_TIME_OFFSET_MS = 0;
 export const DEFAULT_WEBCAM_VOLUME = 1;
 export const DEFAULT_WEBCAM_MUTED = false;
+export const DEFAULT_WEBCAM_SHOW_AUDIO_ON_TIMELINE = false;
+export const DEFAULT_WEBCAM_NOISE_SUPPRESSION_ENABLED = false;
+export const DEFAULT_WEBCAM_NOISE_SUPPRESSION_LEVEL = 75;
 export const DEFAULT_WEBCAM_FIXED = false;
 export const DEFAULT_WEBCAM_FIXED_HEIGHT_PERCENT = 35;
 
@@ -257,6 +263,9 @@ export const DEFAULT_WEBCAM_OVERLAY: WebcamOverlaySettings = {
 	studioLighting: DEFAULT_STUDIO_LIGHTING_SETTINGS,
 	volume: DEFAULT_WEBCAM_VOLUME,
 	muted: DEFAULT_WEBCAM_MUTED,
+	showAudioOnTimeline: DEFAULT_WEBCAM_SHOW_AUDIO_ON_TIMELINE,
+	noiseSuppressionEnabled: DEFAULT_WEBCAM_NOISE_SUPPRESSION_ENABLED,
+	noiseSuppressionLevel: DEFAULT_WEBCAM_NOISE_SUPPRESSION_LEVEL,
 	fixed: DEFAULT_WEBCAM_FIXED,
 	fixedHeightPercent: DEFAULT_WEBCAM_FIXED_HEIGHT_PERCENT,
 };

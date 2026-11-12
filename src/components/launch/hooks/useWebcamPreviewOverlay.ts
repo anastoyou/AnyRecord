@@ -358,14 +358,14 @@ export function useWebcamPreviewOverlay({
 					video: webcamDeviceId
 						? {
 								deviceId: { exact: webcamDeviceId },
-								width: { ideal: 320 },
-								height: { ideal: 320 },
-								frameRate: { ideal: 24, max: 30 },
+								width: { ideal: 1280 },
+								height: { ideal: 720 },
+								frameRate: { ideal: 30, max: 30 },
 							}
 						: {
-								width: { ideal: 320 },
-								height: { ideal: 320 },
-								frameRate: { ideal: 24, max: 30 },
+								width: { ideal: 1280 },
+								height: { ideal: 720 },
+								frameRate: { ideal: 30, max: 30 },
 							},
 					audio: false,
 				});

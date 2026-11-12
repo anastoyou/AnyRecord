@@ -121,11 +121,11 @@ interface RendererNativeStaticLayoutChunkMetric {
 	startSec: number;
 	durationSec: number;
 	backend:
-		| "cuda-overlay"
-		| "cuda-scale-cpu-pad"
-		| "cuda-static-composite"
-		| "nvidia-cuda-compositor"
-		| "windows-d3d11-compositor";
+	| "cuda-overlay"
+	| "cuda-scale-cpu-pad"
+	| "cuda-static-composite"
+	| "nvidia-cuda-compositor"
+	| "windows-d3d11-compositor";
 	elapsedMs: number;
 	outputBytes: number;
 	fallbackReason?: string;
@@ -272,6 +272,7 @@ interface Window {
 				capturesMicrophone?: boolean;
 				microphoneDeviceId?: string;
 				microphoneLabel?: string;
+				preferBrowserMicrophone?: boolean;
 			},
 		) => Promise<{
 			success: boolean;
@@ -1346,23 +1347,23 @@ interface CursorTelemetryPoint {
 	cy: number;
 	pressure?: number;
 	interactionType?:
-		| "move"
-		| "click"
-		| "double-click"
-		| "right-click"
-		| "middle-click"
+	| "move"
+	| "click"
+	| "double-click"
+	| "right-click"
+	| "middle-click"
 		| "mouseup"
-		| "keypress";
-	cursorType?:
+	| "keypress";
+cursorType ?:
 		| "arrow"
-		| "text"
-		| "pointer"
-		| "crosshair"
-		| "open-hand"
-		| "closed-hand"
-		| "resize-ew"
-		| "resize-ns"
-		| "not-allowed";
+	| "text"
+	| "pointer"
+	| "crosshair"
+	| "open-hand"
+	| "closed-hand"
+	| "resize-ew"
+	| "resize-ns"
+	| "not-allowed";
 }
 
 interface SystemCursorAsset {

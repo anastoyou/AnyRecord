@@ -1,4 +1,12 @@
-import { type MutableRefObject, useCallback, useEffect, useRef, useState } from "react";
+import {
+	type Dispatch,
+	type MutableRefObject,
+	type SetStateAction,
+	useCallback,
+	useEffect,
+	useRef,
+	useState,
+} from "react";
 import {
 	createEditorHistoryStack,
 	type EditorHistorySnapshot,
@@ -9,10 +17,13 @@ import {
 } from "../editorHistory";
 import { deriveNextId } from "../projectPersistence";
 import type { useTimelineState } from "../state/useTimelineState";
+import type { WebcamOverlaySettings } from "../types";
 import { cloneStructured } from "../videoEditorUtils";
 
 type Input = {
 	timeline: ReturnType<typeof useTimelineState>;
+	webcamVisibleRanges?: WebcamOverlaySettings["visibleRanges"];
+	setWebcam?: Dispatch<SetStateAction<WebcamOverlaySettings>>;
 	nextZoomIdRef: MutableRefObject<number>;
 	nextClipIdRef: MutableRefObject<number>;
 	nextAnnotationIdRef: MutableRefObject<number>;
@@ -22,6 +33,8 @@ type Input = {
 
 export function useEditorHistory({
 	timeline,
+	webcamVisibleRanges,
+	setWebcam,
 	nextZoomIdRef,
 	nextClipIdRef,
 	nextAnnotationIdRef,
@@ -70,6 +83,7 @@ export function useEditorHistory({
 			annotationRegions,
 			audioRegions,
 			autoCaptions,
+			webcamVisibleRanges,
 			selectedZoomId,
 			selectedClipId,
 			selectedAnnotationId,
@@ -82,6 +96,7 @@ export function useEditorHistory({
 			annotationRegions,
 			audioRegions,
 			autoCaptions,
+			webcamVisibleRanges,
 			selectedZoomId,
 			selectedClipId,
 			selectedAnnotationId,
@@ -98,6 +113,10 @@ export function useEditorHistory({
 			setAnnotationRegions(cloned.annotationRegions);
 			setAudioRegions(cloned.audioRegions);
 			setAutoCaptions(cloned.autoCaptions);
+			setWebcam?.((prev) => ({
+				...prev,
+				visibleRanges: cloned.webcamVisibleRanges,
+			}));
 			setSelectedZoomId(cloned.selectedZoomId);
 			setSelectedClipId(cloned.selectedClipId);
 			setSelectedAnnotationId(cloned.selectedAnnotationId);
@@ -129,6 +148,7 @@ export function useEditorHistory({
 			setAnnotationRegions,
 			setAudioRegions,
 			setAutoCaptions,
+			setWebcam,
 			setSelectedZoomId,
 			setSelectedClipId,
 			setSelectedAnnotationId,

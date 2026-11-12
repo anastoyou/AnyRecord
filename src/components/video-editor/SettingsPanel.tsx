@@ -2630,6 +2630,62 @@ export function SettingsPanel({
 							onChange={(v) => updateWebcam({ volume: v })}
 							formatValue={(v) => `${Math.round(v * 100)}%`}
 						/>
+						<div className="flex items-center justify-between pt-1">
+							<span className="text-xs text-muted-foreground">
+								{tSettings(
+									"effects.webcamShowAudioOnTimeline",
+									"Show audio on timeline",
+								)}
+							</span>
+							<Switch
+								aria-label={tSettings(
+									"effects.webcamShowAudioOnTimeline",
+									"Show audio on timeline",
+								)}
+								checked={webcam?.showAudioOnTimeline ?? false}
+								onCheckedChange={(showAudioOnTimeline) =>
+									updateWebcam({ showAudioOnTimeline })
+								}
+							/>
+						</div>
+						<div className="flex items-center justify-between pt-1">
+							<span className="text-xs text-muted-foreground">
+								{tSettings(
+									"effects.webcamNoiseSuppression",
+									"Remove background noise",
+								)}
+							</span>
+							<Switch
+								aria-label={tSettings(
+									"effects.webcamNoiseSuppression",
+									"Remove background noise",
+								)}
+								checked={webcam?.noiseSuppressionEnabled ?? false}
+								onCheckedChange={(noiseSuppressionEnabled) =>
+									updateWebcam({
+										noiseSuppressionEnabled,
+										...(noiseSuppressionEnabled &&
+										(webcam?.noiseSuppressionLevel ?? 0) === 0
+											? { noiseSuppressionLevel: 75 }
+											: {}),
+									})
+								}
+							/>
+						</div>
+						{webcam?.noiseSuppressionEnabled && (
+							<SliderControl
+								label={tSettings(
+									"effects.webcamNoiseSuppressionLevel",
+									"Noise Reduction",
+								)}
+								value={webcam?.noiseSuppressionLevel ?? 75}
+								min={5}
+								max={100}
+								step={1}
+								onChange={(v) => updateWebcam({ noiseSuppressionLevel: Math.round(v) })}
+								formatValue={(v) => `${Math.round(v)}%`}
+							/>
+						)}
 					</div>
 				)}
 
@@ -3475,17 +3531,15 @@ export function SettingsPanel({
 										onChange={(v) => updateWebcam({ width: v, size: v })}
 										formatValue={(v) => `${Math.round(v)}%`}
 									/>
-									{advanced && (
-										<SliderControl
-											label={tSettings("effects.webcamHeight", "Webcam Height")}
-											value={webcamHeight}
-											min={10}
-											max={100}
-											step={1}
-											onChange={(v) => updateWebcam({ height: v })}
-											formatValue={(v) => `${Math.round(v)}%`}
-										/>
-									)}
+									<SliderControl
+										label={tSettings("effects.webcamHeight", "Webcam Height")}
+										value={webcamHeight}
+										min={10}
+										max={100}
+										step={1}
+										onChange={(v) => updateWebcam({ height: v })}
+										formatValue={(v) => `${Math.round(v)}%`}
+									/>
 								</>
 							)}
 							{advanced && (
@@ -3680,6 +3734,64 @@ export function SettingsPanel({
 									onChange={(v) => updateWebcam({ volume: v })}
 									formatValue={(v) => `${Math.round(v * 100)}%`}
 								/>
+								<div className="flex items-center justify-between py-1">
+									<span className="text-xs text-muted-foreground">
+										{tSettings(
+											"effects.webcamShowAudioOnTimeline",
+											"Show audio on timeline",
+										)}
+									</span>
+									<Switch
+										aria-label={tSettings(
+											"effects.webcamShowAudioOnTimeline",
+											"Show audio on timeline",
+										)}
+										checked={webcam?.showAudioOnTimeline ?? false}
+										onCheckedChange={(showAudioOnTimeline) =>
+											updateWebcam({ showAudioOnTimeline })
+										}
+									/>
+								</div>
+								<div className="flex items-center justify-between py-1">
+									<span className="text-xs text-muted-foreground">
+										{tSettings(
+											"effects.webcamNoiseSuppression",
+											"Remove background noise",
+										)}
+									</span>
+									<Switch
+										aria-label={tSettings(
+											"effects.webcamNoiseSuppression",
+											"Remove background noise",
+										)}
+										checked={webcam?.noiseSuppressionEnabled ?? false}
+										onCheckedChange={(noiseSuppressionEnabled) =>
+											updateWebcam({
+												noiseSuppressionEnabled,
+												...(noiseSuppressionEnabled &&
+												(webcam?.noiseSuppressionLevel ?? 0) === 0
+													? { noiseSuppressionLevel: 75 }
+													: {}),
+											})
+										}
+									/>
+								</div>
+								{webcam?.noiseSuppressionEnabled && (
+									<SliderControl
+										label={tSettings(
+											"effects.webcamNoiseSuppressionLevel",
+											"Noise Reduction",
+										)}
+										value={webcam?.noiseSuppressionLevel ?? 75}
+										min={5}
+										max={100}
+										step={1}
+										onChange={(v) =>
+											updateWebcam({ noiseSuppressionLevel: Math.round(v) })
+										}
+										formatValue={(v) => `${Math.round(v)}%`}
+									/>
+								)}
 							</div>
 							<div className="py-2 border-t border-foreground/10">
 								<div className="flex flex-col gap-4">

@@ -247,6 +247,18 @@ describe("annotations across the canvas and imported webcam ranges", () => {
 			{ startMs: 1200, endMs: 2000 },
 		]);
 	});
+
+	it("preserves and clamps webcam noise suppression settings", () => {
+		const editor = normalizeProjectEditor({
+			webcam: {
+				sourcePath: "/sequence-webcam.mp4",
+				noiseSuppressionEnabled: true,
+				noiseSuppressionLevel: 85,
+			} as never,
+		});
+		expect(editor.webcam.noiseSuppressionEnabled).toBe(true);
+		expect(editor.webcam.noiseSuppressionLevel).toBe(85);
+	});
 });
 
 it("discards inverted saved source bounds while preserving the in-point", () => {

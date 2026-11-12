@@ -1,6 +1,7 @@
 export const ZOOM_ROW_ID = "row-zoom";
 export const CLIP_ROW_ID = "row-clip";
 export const CAMERA_ROW_ID = "row-camera";
+export const CAMERA_AUDIO_ROW_ID = "row-camera-audio";
 export const ANNOTATION_ROW_ID = "row-annotation";
 export const AUDIO_ROW_ID = "row-audio";
 export const SOURCE_AUDIO_ROW_ID = "row-source-audio";

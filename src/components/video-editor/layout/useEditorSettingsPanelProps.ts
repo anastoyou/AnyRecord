@@ -99,13 +99,9 @@ export function useEditorSettingsPanelProps(input: Input): ComponentProps<typeof
 
 	const showSourceAudioTrack = timeline.clipRegions.some((clip) => clip.showSourceAudio);
 	const handleShowSourceAudioTrackChange = (show: boolean) => {
-		if (timeline.selectedClipId) {
-			clipCommands.handleClipShowSourceAudioChange(show);
-		} else {
-			timeline.setClipRegions((prev) =>
-				prev.map((clip) => ({ ...clip, showSourceAudio: show })),
-			);
-		}
+		timeline.setClipRegions((prev) =>
+			prev.map((clip) => ({ ...clip, showSourceAudio: show })),
+		);
 	};
 
 	return {

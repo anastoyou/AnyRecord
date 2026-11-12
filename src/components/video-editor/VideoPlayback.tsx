@@ -262,6 +262,7 @@ interface VideoPlaybackProps {
 	cropRegion?: import("./types").CropRegion;
 	webcam?: WebcamOverlaySettings;
 	webcamVideoPath?: string | null;
+	hasMicCompanionTrack?: boolean;
 	onWebcamChange?: (webcam: WebcamOverlaySettings) => void;
 	gestureRegions?: FingerGestureRegion[];
 	gestureSettings?: GestureTrackingSettings;
@@ -352,6 +353,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 			cropRegion,
 			webcam,
 			webcamVideoPath,
+			hasMicCompanionTrack = false,
 			onWebcamChange,
 			gestureRegions = [],
 			gestureSettings,
@@ -433,6 +435,23 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 		const overlayRef = useRef<HTMLDivElement | null>(null);
 		const focusIndicatorRef = useRef<HTMLDivElement | null>(null);
 		const webcamVideoRef = useRef<HTMLVideoElement | null>(null);
+		const webcamAudioFilterRef = useRef<{
+			videoElement: HTMLVideoElement;
+			context: AudioContext;
+			highPass: BiquadFilterNode;
+			lowPass: BiquadFilterNode;
+			dryGain: GainNode;
+			wetGain: GainNode;
+		} | null>(null);
+		useEffect(() => {
+			return () => {
+				const filter = webcamAudioFilterRef.current;
+				webcamAudioFilterRef.current = null;
+				if (filter) {
+					void filter.context.close().catch(() => undefined);
+				}
+			};
+		}, []);
 		const webcamCanvasRef = useRef<HTMLCanvasElement | null>(null);
 		const webcamBubbleRef = useRef<HTMLDivElement | null>(null);
 		const webcamBubbleInnerRef = useRef<HTMLDivElement | null>(null);
@@ -1890,9 +1909,74 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 			if (Math.abs(webcamVideo.volume - targetVolume) > 0.01) {
 				webcamVideo.volume = targetVolume;
 			}
-			const shouldMute = Boolean(webcam?.muted) || !isVisible;
+			const shouldMute =
+				Boolean(webcam?.muted) ||
+				!isVisible ||
+				(!webcam?.showAudioOnTimeline && hasMicCompanionTrack);
 			if (webcamVideo.muted !== shouldMute) {
 				webcamVideo.muted = shouldMute;
+			}
+
+			const denoiseEnabled = Boolean(webcam?.noiseSuppressionEnabled);
+			const denoiseRatio = Math.max(0, Math.min(100, webcam?.noiseSuppressionLevel ?? 75)) / 100;
+			if (denoiseEnabled || webcamAudioFilterRef.current?.videoElement === webcamVideo) {
+				try {
+					let filter = webcamAudioFilterRef.current;
+					if (!filter || filter.videoElement !== webcamVideo) {
+						if (filter) {
+							void filter.context.close().catch(() => undefined);
+						}
+						const AudioCtx =
+							window.AudioContext ||
+							(window as Window & { webkitAudioContext?: typeof AudioContext })
+								.webkitAudioContext;
+						if (AudioCtx) {
+							const context = new AudioCtx({ latencyHint: "interactive" });
+							const source = context.createMediaElementSource(webcamVideo);
+							const highPass = context.createBiquadFilter();
+							highPass.type = "highpass";
+							highPass.Q.value = 0.707;
+							const humNotch = context.createBiquadFilter();
+							humNotch.type = "peaking";
+							humNotch.frequency.value = 160;
+							humNotch.Q.value = 1.4;
+							humNotch.gain.value = -5;
+							const lowPass = context.createBiquadFilter();
+							lowPass.type = "lowpass";
+							lowPass.Q.value = 0.707;
+							const dryGain = context.createGain();
+							const wetGain = context.createGain();
+							source.connect(dryGain);
+							dryGain.connect(context.destination);
+							source.connect(highPass);
+							highPass.connect(humNotch);
+							humNotch.connect(lowPass);
+							lowPass.connect(wetGain);
+							wetGain.connect(context.destination);
+							filter = {
+								videoElement: webcamVideo,
+								context,
+								highPass,
+								lowPass,
+								dryGain,
+								wetGain,
+							};
+							webcamAudioFilterRef.current = filter;
+						}
+					}
+					if (filter) {
+						const wet = denoiseEnabled ? denoiseRatio : 0;
+						filter.highPass.frequency.value = 85 + wet * 95;
+						filter.lowPass.frequency.value = 13000 - wet * 5000;
+						filter.dryGain.gain.value = Math.max(0, 1 - wet);
+						filter.wetGain.gain.value = wet;
+						if (isPlaying && filter.context.state === "suspended") {
+							void filter.context.resume().catch(() => undefined);
+						}
+					}
+				} catch {
+					// Ignore if browser media element source attachment is unavailable
+				}
 			}
 
 			if (isPlaying) {
@@ -1908,6 +1992,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 		}, [
 			timelineTime,
 			clipRegions,
+			hasMicCompanionTrack,
 			isPlaying,
 			webcam,
 			webcamEnabled,
@@ -2732,7 +2817,11 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 													"pointer-events-none absolute inset-0 block h-full w-full object-fill",
 													webcam.studioLighting?.enabled && "opacity-0",
 												)}
-												muted={Boolean(webcam.muted) || !isWebcamVisibleAtSourceTime(webcam, currentTime)}
+												muted={
+													Boolean(webcam.muted) ||
+													!isWebcamVisibleAtSourceTime(webcam, currentTime) ||
+													(!webcam.showAudioOnTimeline && hasMicCompanionTrack)
+												}
 												playsInline
 												preload="auto"
 												aria-hidden="true"

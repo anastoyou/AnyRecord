@@ -18,6 +18,7 @@ import type {
 import { cn } from "@/lib/utils";
 import {
 	CAPTION_ROW_ID,
+	CAMERA_AUDIO_ROW_ID,
 	CAMERA_ROW_ID,
 	CLIP_ROW_ID,
 	GESTURE_ROW_ID,
@@ -33,7 +34,7 @@ import {
 	isAnnotationTrackRowId,
 	isAudioTrackRowId,
 } from "../../core/rows";
-import type { TimelineRenderItem } from "../../core/timelineTypes";
+import type { AudioPeaksData, TimelineRenderItem } from "../../core/timelineTypes";
 import { DEFAULT_CAPTION_DURATION_MS } from "../../hooks/actions/useTimelineCaptionActions";
 import { useTimelineAudioPeaks } from "../../hooks/useTimelineAudioPeaks";
 import Item from "../../Item";
@@ -84,6 +85,11 @@ interface TimelineCanvasProps {
 	selectedClipId?: string | null;
 	hasCameraTrack?: boolean;
 	cameraVideoPath?: string | null;
+	showCameraAudioTrack?: boolean;
+	cameraAudioPeaks?: AudioPeaksData | null;
+	cameraAudioVolume?: number;
+	cameraAudioMuted?: boolean;
+	cameraAudioLabel?: string;
 	selectedCameraId?: string | null;
 	onSelectCamera?: (id: string | null) => void;
 	selectedAnnotationId?: string | null;
@@ -404,11 +410,11 @@ function useTimelineHover({
 		timelineHoverMs === null
 			? 0
 			: valueToPixels(
-					Math.max(
-						0,
-						getPlayheadDisplayTime(timelineHoverMs, clipPresentation) - rangeStart,
-					),
-				);
+				Math.max(
+					0,
+					getPlayheadDisplayTime(timelineHoverMs, clipPresentation) - rangeStart,
+				),
+			);
 	const canShowGhostPlayhead = isTimelineHovered && timelineHoverMs !== null;
 
 	return {
@@ -453,6 +459,11 @@ interface TimelineCanvasRowsProps {
 	selectedClipId?: string | null;
 	hasCameraTrack?: boolean;
 	cameraVideoPath?: string | null;
+	showCameraAudioTrack?: boolean;
+	cameraAudioPeaks?: AudioPeaksData | null;
+	cameraAudioVolume?: number;
+	cameraAudioMuted?: boolean;
+	cameraAudioLabel?: string;
 	selectedCameraId?: string | null;
 	onSelectCamera?: (id: string | null) => void;
 	selectedAnnotationId?: string | null;
@@ -547,6 +558,11 @@ const TimelineCanvasRows = memo(function TimelineCanvasRows({
 	selectedClipId,
 	hasCameraTrack = false,
 	cameraVideoPath,
+	showCameraAudioTrack = false,
+	cameraAudioPeaks = null,
+	cameraAudioVolume = 1,
+	cameraAudioMuted = false,
+	cameraAudioLabel = "Camera Audio",
 	selectedCameraId,
 	onSelectCamera,
 	selectedAnnotationId,
@@ -689,21 +705,21 @@ const TimelineCanvasRows = memo(function TimelineCanvasRows({
 		ghostStartMs === null
 			? null
 			: getRegionDisplaySpan(
-					{ start: ghostStartMs, end: ghostStartMs + pixelsToValue(ghostWidthPx) },
-					clipPresentation,
-				);
+				{ start: ghostStartMs, end: ghostStartMs + pixelsToValue(ghostWidthPx) },
+				clipPresentation,
+			);
 	const zoomGhostOffsetPx = zoomGhost ? valueToPixels(zoomGhost.start - rangeStart) : 0;
 	const zoomGhostWidthPx = zoomGhost ? valueToPixels(zoomGhost.end - zoomGhost.start) : 0;
 	const embeddedGhost =
 		captionGhostStartMs === null
 			? null
 			: getEmbeddedCaptionSpan(
-					{
-						start: captionGhostStartMs,
-						end: captionGhostStartMs + pixelsToValue(captionGhostWidthPx),
-					},
-					clipPresentation,
-				);
+				{
+					start: captionGhostStartMs,
+					end: captionGhostStartMs + pixelsToValue(captionGhostWidthPx),
+				},
+				clipPresentation,
+			);
 	const embeddedGhostOffset = embeddedGhost ? valueToPixels(embeddedGhost.start - rangeStart) : 0;
 	const embeddedGhostWidth = embeddedGhost
 		? valueToPixels(embeddedGhost.end - embeddedGhost.start)
@@ -713,12 +729,12 @@ const TimelineCanvasRows = memo(function TimelineCanvasRows({
 		audioPortionGhostStartMs === null
 			? null
 			: getRegionDisplaySpan(
-					{
-						start: audioPortionGhostStartMs,
-						end: audioPortionGhostStartMs + pixelsToValue(audioPortionGhostWidthPx),
-					},
-					clipPresentation,
-				);
+				{
+					start: audioPortionGhostStartMs,
+					end: audioPortionGhostStartMs + pixelsToValue(audioPortionGhostWidthPx),
+				},
+				clipPresentation,
+			);
 	const audioPortionGhostOffsetPx = audioPortionGhost
 		? valueToPixels(audioPortionGhost.start - rangeStart)
 		: 0;
@@ -763,13 +779,13 @@ const TimelineCanvasRows = memo(function TimelineCanvasRows({
 								style={
 									direction === "rtl"
 										? {
-												right: `${embeddedGhostOffset}px`,
-												width: `${embeddedGhostWidth}px`,
-											}
+											right: `${embeddedGhostOffset}px`,
+											width: `${embeddedGhostWidth}px`,
+										}
 										: {
-												left: `${embeddedGhostOffset}px`,
-												width: `${embeddedGhostWidth}px`,
-											}
+											left: `${embeddedGhostOffset}px`,
+											width: `${embeddedGhostWidth}px`,
+										}
 								}
 							>
 								<div
@@ -861,6 +877,35 @@ const TimelineCanvasRows = memo(function TimelineCanvasRows({
 					);
 				})}
 			</Row>
+			{showSourceAudioTrack &&
+				sourceAudioTracks.map((track) => (
+					<Row key={track.id} id={`${SOURCE_AUDIO_ROW_ID}-${track.id}`}>
+						{clipItems.map((item) => {
+							const settings = getSourceAudioTrackSettingsForClip?.(item.id)?.[
+								track.id
+							] ?? { volume: 1, normalize: false };
+							return (
+								<Item
+									key={`source-audio-${track.id}-${item.id}`}
+									id={`source-audio-${track.id}-${item.id}`}
+									rowId={`${SOURCE_AUDIO_ROW_ID}-${track.id}`}
+									span={liveSpanPreviewById?.[item.id] ?? item.span}
+									disabled
+									isSelected={item.id === selectedClipId}
+									onSelect={() => onSelectClip?.(item.id)}
+									variant="audio"
+									waveformPeaks={track.peaks}
+									waveformSegmentSpan={item.sourceSpan ?? item.span}
+									waveformGain={Math.max(0, Math.min(1, settings.volume))}
+									waveformNormalize={Boolean(settings.normalize)}
+									muted={item.muted}
+								>
+									{track.label}
+								</Item>
+							);
+						})}
+					</Row>
+				))}
 			{hasCameraTrack && (
 				<Row
 					filmstrip
@@ -885,44 +930,36 @@ const TimelineCanvasRows = memo(function TimelineCanvasRows({
 					))}
 				</Row>
 			)}
-			{showSourceAudioTrack &&
-				sourceAudioTracks.map((track) => (
-					<Row key={track.id} id={`${SOURCE_AUDIO_ROW_ID}-${track.id}`}>
-						{clipItems
-							.filter((item) => item.showSourceAudio)
-							.map((item) => {
-								const settings = getSourceAudioTrackSettingsForClip?.(item.id)?.[
-									track.id
-								] ?? { volume: 1, normalize: false };
-								return (
-									<Item
-										key={`source-audio-${track.id}-${item.id}`}
-										id={`source-audio-${track.id}-${item.id}`}
-										rowId={`${SOURCE_AUDIO_ROW_ID}-${track.id}`}
-										span={liveSpanPreviewById?.[item.id] ?? item.span}
-										disabled
-										isSelected={item.id === selectedClipId}
-										onSelect={() => onSelectClip?.(item.id)}
-										variant="audio"
-										waveformPeaks={track.peaks}
-										waveformSegmentSpan={item.sourceSpan ?? item.span}
-										waveformGain={Math.max(0, Math.min(1, settings.volume))}
-										waveformNormalize={Boolean(settings.normalize)}
-										muted={item.muted}
-									>
-										{track.label}
-									</Item>
-								);
-							})}
-					</Row>
-				))}
+			{hasCameraTrack && showCameraAudioTrack && (
+				<Row id={CAMERA_AUDIO_ROW_ID} isEmpty={cameraItems.length === 0}>
+					{cameraItems.map((item) => (
+						<Item
+							key={`camera-audio-${item.id}`}
+							id={`camera-audio-${item.id}`}
+							rowId={CAMERA_AUDIO_ROW_ID}
+							span={liveSpanPreviewById?.[item.id] ?? item.span}
+							disabled
+							isSelected={item.id === selectedCameraId}
+							onSelect={() => onSelectCamera?.(item.id)}
+							variant="audio"
+							waveformPeaks={cameraAudioPeaks}
+							waveformSegmentSpan={item.sourceSpan ?? item.span}
+							waveformGain={Math.max(0, Math.min(1, cameraAudioVolume))}
+							muted={Boolean(cameraAudioMuted)}
+						>
+							{cameraAudioLabel}
+						</Item>
+					))}
+				</Row>
+			)}
 
 			<Row
 				id={ZOOM_ROW_ID}
 				compact={
 					annotationRows.length +
-						audioRows.length +
-						(showSourceAudioTrack ? sourceAudioTracks.length : 0) >
+					audioRows.length +
+					(showSourceAudioTrack ? sourceAudioTracks.length : 0) +
+					(hasCameraTrack && showCameraAudioTrack ? 1 : 0) >
 					0
 				}
 				isEmpty={zoomItems.length === 0}
@@ -942,13 +979,13 @@ const TimelineCanvasRows = memo(function TimelineCanvasRows({
 							style={
 								direction === "rtl"
 									? {
-											right: `${zoomGhostOffsetPx}px`,
-											width: `${zoomGhostWidthPx}px`,
-										}
+										right: `${zoomGhostOffsetPx}px`,
+										width: `${zoomGhostWidthPx}px`,
+									}
 									: {
-											left: `${zoomGhostOffsetPx}px`,
-											width: `${zoomGhostWidthPx}px`,
-										}
+										left: `${zoomGhostOffsetPx}px`,
+										width: `${zoomGhostWidthPx}px`,
+									}
 							}
 						>
 							<div
@@ -990,8 +1027,9 @@ const TimelineCanvasRows = memo(function TimelineCanvasRows({
 					id={GESTURE_ROW_ID}
 					compact={
 						annotationRows.length +
-							audioRows.length +
-							(showSourceAudioTrack ? sourceAudioTracks.length : 0) >
+						audioRows.length +
+						(showSourceAudioTrack ? sourceAudioTracks.length : 0) +
+						(hasCameraTrack && showCameraAudioTrack ? 1 : 0) >
 						0
 					}
 					isEmpty={gestureItems.length === 0}
@@ -1058,72 +1096,75 @@ const TimelineCanvasRows = memo(function TimelineCanvasRows({
 				</Row>
 			))}
 
-			{(audioPortionItems.length > 0 || audioRows.length > 0 || showSourceAudioTrack) && (
-				<Row
-					id={AUDIO_PORTION_ROW_ID}
-					compact
-					label="Sound"
-					labelColor="#818cf8"
-					isEmpty={audioPortionItems.length === 0}
-					hint={audioPortionItems.length === 0 ? "Click to add Sound Portion" : undefined}
-					onMouseEnter={onAudioPortionRowMouseEnter}
-					onMouseMove={onAudioPortionRowMouseMove}
-					onMouseLeave={onAudioPortionRowMouseLeave}
-					onMouseDown={onAudioPortionRowMouseDown}
-					onClick={onAudioPortionRowClick}
-				>
-					{canShowGhostAudioPortion && audioPortionGhostStartMs !== null && (
-						<div
-							data-testid="timeline-add-preview"
-							className="absolute inset-0 z-[3] pointer-events-none"
-						>
+			{(audioPortionItems.length > 0 ||
+				audioRows.length > 0 ||
+				showSourceAudioTrack ||
+				(hasCameraTrack && showCameraAudioTrack)) && (
+					<Row
+						id={AUDIO_PORTION_ROW_ID}
+						compact
+						label="Sound"
+						labelColor="#818cf8"
+						isEmpty={audioPortionItems.length === 0}
+						hint={audioPortionItems.length === 0 ? "Click to add Sound Portion" : undefined}
+						onMouseEnter={onAudioPortionRowMouseEnter}
+						onMouseMove={onAudioPortionRowMouseMove}
+						onMouseLeave={onAudioPortionRowMouseLeave}
+						onMouseDown={onAudioPortionRowMouseDown}
+						onClick={onAudioPortionRowClick}
+					>
+						{canShowGhostAudioPortion && audioPortionGhostStartMs !== null && (
 							<div
-								className="absolute top-1/2 -translate-y-1/2 h-[85%] min-h-[22px]"
-								style={
-									direction === "rtl"
-										? {
+								data-testid="timeline-add-preview"
+								className="absolute inset-0 z-[3] pointer-events-none"
+							>
+								<div
+									className="absolute top-1/2 -translate-y-1/2 h-[85%] min-h-[22px]"
+									style={
+										direction === "rtl"
+											? {
 												right: `${audioPortionGhostOffsetPx}px`,
 												width: `${portionGhostWidthPx}px`,
 											}
-										: {
+											: {
 												left: `${audioPortionGhostOffsetPx}px`,
 												width: `${portionGhostWidthPx}px`,
 											}
-								}
-							>
-								<div
-									className={cn(
-										glassStyles.glassAudioPortion,
-										"w-full h-full overflow-hidden flex items-center justify-center cursor-default relative opacity-80",
-									)}
+									}
 								>
-									<div className={cn(glassStyles.zoomEndCap, glassStyles.left)} />
-									<div className={cn(glassStyles.zoomEndCap, glassStyles.right)} />
-									<div className="relative z-10 inline-flex h-4 w-4 items-center justify-center rounded-full border border-white/45 bg-white/15 text-white">
-										<Plus className="h-2.5 w-2.5" />
+									<div
+										className={cn(
+											glassStyles.glassAudioPortion,
+											"w-full h-full overflow-hidden flex items-center justify-center cursor-default relative opacity-80",
+										)}
+									>
+										<div className={cn(glassStyles.zoomEndCap, glassStyles.left)} />
+										<div className={cn(glassStyles.zoomEndCap, glassStyles.right)} />
+										<div className="relative z-10 inline-flex h-4 w-4 items-center justify-center rounded-full border border-white/45 bg-white/15 text-white">
+											<Plus className="h-2.5 w-2.5" />
+										</div>
 									</div>
 								</div>
 							</div>
-						</div>
-					)}
-					{audioPortionItems
-						.filter((item) => !hiddenIds.has(item.id))
-						.map((item) => (
-							<Item
-								id={item.id}
-								key={item.id}
-								rowId={item.rowId}
-								span={item.span}
-								isSelected={item.id === selectedAudioPortionId}
-								onSelectId={onSelectAudioPortion}
-								volume={item.volume}
-								variant="audio-portion"
-							>
-								{item.label}
-							</Item>
-						))}
-				</Row>
-			)}
+						)}
+						{audioPortionItems
+							.filter((item) => !hiddenIds.has(item.id))
+							.map((item) => (
+								<Item
+									id={item.id}
+									key={item.id}
+									rowId={item.rowId}
+									span={item.span}
+									isSelected={item.id === selectedAudioPortionId}
+									onSelectId={onSelectAudioPortion}
+									volume={item.volume}
+									variant="audio-portion"
+								>
+									{item.label}
+								</Item>
+							))}
+					</Row>
+				)}
 		</>
 	);
 });
@@ -1153,6 +1194,11 @@ export default function TimelineCanvas({
 	selectedClipId,
 	hasCameraTrack = false,
 	cameraVideoPath,
+	showCameraAudioTrack = false,
+	cameraAudioPeaks = null,
+	cameraAudioVolume = 1,
+	cameraAudioMuted = false,
+	cameraAudioLabel = "Camera Audio",
 	selectedCameraId,
 	onSelectCamera,
 	selectedAnnotationId,
@@ -1343,13 +1389,29 @@ export default function TimelineCanvas({
 		}
 		const sourceAudioRows = showSourceAudioTrack ? sourceAudioTracks.length : 0;
 		const cameraRows = hasCameraTrack ? 1 : 0;
+		const cameraAudioRows = hasCameraTrack && showCameraAudioTrack ? 1 : 0;
 		const hasAudioPortionRow =
 			items.some((item) => item.rowId === AUDIO_PORTION_ROW_ID) ||
 			audioRowIds.size > 0 ||
-			showSourceAudioTrack;
+			showSourceAudioTrack ||
+			cameraAudioRows > 0;
 		const audioPortionRows = hasAudioPortionRow ? 1 : 0;
-		return 2 + cameraRows + sourceAudioRows + annotationRowIds.size + audioRowIds.size + audioPortionRows;
-	}, [items, showSourceAudioTrack, sourceAudioTracks.length, hasCameraTrack]);
+		return (
+			2 +
+			cameraRows +
+			cameraAudioRows +
+			sourceAudioRows +
+			annotationRowIds.size +
+			audioRowIds.size +
+			audioPortionRows
+		);
+	}, [
+		items,
+		showSourceAudioTrack,
+		sourceAudioTracks.length,
+		hasCameraTrack,
+		showCameraAudioTrack,
+	]);
 	const timelineRowsMinHeightPx = getTimelineRowsMinHeightPx(timelineRowCount);
 	const timelineContentMinHeightPx = getTimelineContentMinHeightPx(timelineRowCount);
 	const sideProperty = direction === "rtl" ? "right" : "left";
@@ -1457,6 +1519,11 @@ export default function TimelineCanvas({
 					selectedClipId={selectedClipId}
 					hasCameraTrack={hasCameraTrack}
 					cameraVideoPath={cameraVideoPath}
+					showCameraAudioTrack={showCameraAudioTrack}
+					cameraAudioPeaks={cameraAudioPeaks}
+					cameraAudioVolume={cameraAudioVolume}
+					cameraAudioMuted={cameraAudioMuted}
+					cameraAudioLabel={cameraAudioLabel}
 					selectedCameraId={selectedCameraId}
 					onSelectCamera={onSelectCamera}
 					selectedAnnotationId={selectedAnnotationId}

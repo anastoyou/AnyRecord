@@ -98,6 +98,9 @@ export function EditorVideoPreview({
 			webcamVideoPath={
 				appearance.webcam.sourcePath ? appearance.resolvedWebcamVideoUrl : null
 			}
+			hasMicCompanionTrack={audio.previewSourceAudioFallbackPaths.some((p) =>
+				/\.mic\./i.test(p),
+			)}
 			onWebcamChange={appearance.setWebcam}
 			gestureRegions={timeline.gestureRegions}
 			gestureSettings={timeline.gestureSettings}

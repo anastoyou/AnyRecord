@@ -430,8 +430,13 @@ export function EditorShell(props: Props) {
 					annotationCommands={annotationCommands}
 					videoPath={project.videoPath}
 					videoSourcePath={project.videoSourcePath}
-					cameraVideoPath={appearance.webcam?.sourcePath ?? null}
+					cameraVideoPath={
+						appearance.resolvedWebcamVideoUrl ?? appearance.webcam?.sourcePath ?? null
+					}
 					hasCameraTrack={Boolean(appearance.webcam?.sourcePath)}
+					showCameraAudioTrack={Boolean(appearance.webcam?.showAudioOnTimeline)}
+					cameraAudioVolume={appearance.webcam?.volume ?? 1}
+					cameraAudioMuted={Boolean(appearance.webcam?.muted)}
 					cursorTelemetrySourcePath={timeline.cursorTelemetrySourcePath}
 					normalizedCursorTelemetry={cursor.normalizedCursorTelemetry}
 					autoSuggestZoomsTrigger={ui.autoSuggestZoomsTrigger}

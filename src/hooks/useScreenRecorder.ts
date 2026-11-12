@@ -2,6 +2,11 @@ import { acquireBrowserScreenCapture, isCapturePermissionDismissed } from "./bro
 import { fixWebmDuration } from "@fix-webm-duration/fix";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "@/components/ui/toast";
+import { loadNoiseSuppressionPreferences } from "@/hooks/useNoiseSuppressionPreferences";
+import {
+	createNoiseSuppressionSession,
+	type NoiseSuppressionSession,
+} from "@/lib/audio/noiseSuppressionEngine";
 import { getEffectiveRecordingDurationMs } from "@/lib/mediaTiming";
 import { hasRecordlySession } from "@/lib/auth/recordlyAuth";
 import {
@@ -410,6 +415,10 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		activeCameraStream.current = camStream;
 	}, []);
 	const mixingContext = useRef<AudioContext | null>(null);
+	const micNoiseSuppressionSession = useRef<NoiseSuppressionSession | null>(null);
+	const micFallbackRawStream = useRef<MediaStream | null>(null);
+	const webcamNoiseSuppressionSession = useRef<NoiseSuppressionSession | null>(null);
+	const webcamAudioRawStream = useRef<MediaStream | null>(null);
 	const chunks = useRef<Blob[]>([]);
 	const webcamChunks = useRef<Blob[]>([]);
 	const startTime = useRef<number>(0);
@@ -635,6 +644,26 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			mixingContext.current = null;
 		}
 
+		if (micNoiseSuppressionSession.current) {
+			micNoiseSuppressionSession.current.dispose();
+			micNoiseSuppressionSession.current = null;
+		}
+
+		if (micFallbackRawStream.current) {
+			micFallbackRawStream.current.getTracks().forEach((track) => track.stop());
+			micFallbackRawStream.current = null;
+		}
+
+		if (webcamNoiseSuppressionSession.current) {
+			webcamNoiseSuppressionSession.current.dispose();
+			webcamNoiseSuppressionSession.current = null;
+		}
+
+		if (webcamAudioRawStream.current) {
+			webcamAudioRawStream.current.getTracks().forEach((track) => track.stop());
+			webcamAudioRawStream.current = null;
+		}
+
 		if (micFallbackRecorder.current) {
 			try {
 				if (micFallbackRecorder.current.state !== "inactive") {
@@ -811,6 +840,14 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 						: null;
 				micFallbackChunks.current = [];
 				recorder.stream.getTracks().forEach((track) => track.stop());
+				if (micNoiseSuppressionSession.current) {
+					micNoiseSuppressionSession.current.dispose();
+					micNoiseSuppressionSession.current = null;
+				}
+				if (micFallbackRawStream.current) {
+					micFallbackRawStream.current.getTracks().forEach((track) => track.stop());
+					micFallbackRawStream.current = null;
+				}
 				micFallbackRecorder.current = null;
 				micFallbackRecorderStartedAt.current = null;
 				resolve(blob);
@@ -952,6 +989,18 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		}
 
 		if (recorder.state !== "inactive") {
+			if (recorder.state === "paused") {
+				try {
+					recorder.resume();
+				} catch {
+					// Ignore resume errors on stopping recorder
+				}
+			}
+			try {
+				recorder.requestData();
+			} catch {
+				// Ignore requestData errors if no buffered chunk is available
+			}
 			recorder.stop();
 		} else if (pending && webcamStopResolver.current) {
 			webcamStopResolver.current(resolvedWebcamPath.current);
@@ -1043,10 +1092,57 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				videoConstraints.deviceId = { exact: webcamDeviceId };
 			}
 
-			webcamStream.current = await navigator.mediaDevices.getUserMedia({
+			const rawWebcamVideoStream = await navigator.mediaDevices.getUserMedia({
 				video: videoConstraints,
 				audio: false,
 			});
+
+			let combinedWebcamStream = rawWebcamVideoStream;
+			if (microphoneEnabled) {
+				try {
+					const nsPrefs = loadNoiseSuppressionPreferences();
+					const webcamMicRaw = await navigator.mediaDevices.getUserMedia(
+						createProcessedMicrophoneConstraints(
+							microphoneDeviceId,
+							nsPrefs.webcamNoiseSuppressionEnabled
+								? "no-noise-suppression"
+								: browserMicrophoneProfile.current,
+						),
+					);
+					webcamAudioRawStream.current = webcamMicRaw;
+					if (
+						nsPrefs.webcamNoiseSuppressionEnabled &&
+						nsPrefs.webcamNoiseSuppressionLevel > 0
+					) {
+						const nsSession = await createNoiseSuppressionSession(webcamMicRaw, {
+							enabled: true,
+							level: nsPrefs.webcamNoiseSuppressionLevel,
+							model: nsPrefs.model,
+						});
+						webcamNoiseSuppressionSession.current = nsSession;
+						await Promise.race([
+							nsSession.workletReady,
+							new Promise((resolve) => setTimeout(resolve, 250)),
+						]);
+						combinedWebcamStream = new MediaStream([
+							...rawWebcamVideoStream.getVideoTracks(),
+							...nsSession.outputStream.getAudioTracks(),
+						]);
+					} else {
+						combinedWebcamStream = new MediaStream([
+							...rawWebcamVideoStream.getVideoTracks(),
+							...webcamMicRaw.getAudioTracks(),
+						]);
+					}
+				} catch (webcamAudioErr) {
+					console.warn(
+						"Unable to attach microphone audio to webcam stream; continuing video-only:",
+						webcamAudioErr,
+					);
+				}
+			}
+
+			webcamStream.current = combinedWebcamStream;
 
 			const mimeType = selectWebcamMimeType();
 			webcamChunks.current = [];
@@ -1056,8 +1152,10 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			});
 			pendingWebcamPathPromise.current = webcamStopPromise.current;
 
+			const hasWebcamAudio = webcamStream.current.getAudioTracks().length > 0;
 			const recorder = new MediaRecorder(webcamStream.current, {
 				videoBitsPerSecond: WEBCAM_BITRATE,
+				...(hasWebcamAudio ? { audioBitsPerSecond: AUDIO_BITRATE_VOICE } : {}),
 				...(mimeType ? { mimeType } : {}),
 			});
 
@@ -1082,9 +1180,14 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 						return;
 					}
 
+					const nowMs = Date.now();
+					const elapsedWebcamMs = webcamStartTime.current
+						? Math.max(0, nowMs - webcamStartTime.current)
+						: 0;
 					const duration = Math.max(
 						0,
-						getRecordingDurationMs(Date.now()) - webcamTimeOffsetMs.current,
+						getRecordingDurationMs(nowMs) - Math.max(0, webcamTimeOffsetMs.current),
+						elapsedWebcamMs,
 					);
 					const webcamBlob = new Blob(
 						webcamChunks.current,
@@ -1107,6 +1210,14 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					webcamStopResolver.current = null;
 					webcamRecorder.current = null;
 					webcamStartTime.current = null;
+					if (webcamNoiseSuppressionSession.current) {
+						webcamNoiseSuppressionSession.current.dispose();
+						webcamNoiseSuppressionSession.current = null;
+					}
+					if (webcamAudioRawStream.current) {
+						webcamAudioRawStream.current.getTracks().forEach((track) => track.stop());
+						webcamAudioRawStream.current = null;
+					}
 					if (webcamStream.current) {
 						webcamStream.current.getTracks().forEach((track) => track.stop());
 						webcamStream.current = null;
@@ -1124,12 +1235,28 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			webcamRecorder.current = null;
 			webcamStartTime.current = null;
 			webcamTimeOffsetMs.current = 0;
+			if (webcamNoiseSuppressionSession.current) {
+				webcamNoiseSuppressionSession.current.dispose();
+				webcamNoiseSuppressionSession.current = null;
+			}
+			if (webcamAudioRawStream.current) {
+				webcamAudioRawStream.current.getTracks().forEach((track) => track.stop());
+				webcamAudioRawStream.current = null;
+			}
 			if (webcamStream.current) {
 				webcamStream.current.getTracks().forEach((track) => track.stop());
 				webcamStream.current = null;
 			}
 		}
-	}, [getRecordingDurationMs, selectWebcamMimeType, webcamDeviceId, webcamEnabled]);
+	}, [
+		cameraAspectRatio,
+		getRecordingDurationMs,
+		microphoneDeviceId,
+		microphoneEnabled,
+		selectWebcamMimeType,
+		webcamDeviceId,
+		webcamEnabled,
+	]);
 
 	/** Start the prepared webcam MediaRecorder. Call after main recording begins. */
 	const beginWebcamCapture = useCallback(() => {
@@ -1303,7 +1430,6 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				markRecordingResumed(stoppedAtMs);
 				const expectedDurationMs = getRecordingDurationMs(stoppedAtMs);
 				const micFallbackBlobPromise = stopMicFallbackRecorder();
-				const webcamPathPromise = stopWebcamRecorder();
 				const isNativeWindows = nativeWindowsRecording.current;
 
 				const ipcStopStart = performance.now();
@@ -1314,6 +1440,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				} catch (error) {
 					result = { success: false, error: getErrorMessage(error) };
 				}
+				const webcamPathPromise = stopWebcamRecorder();
 				nativeStopRequestInFlight.current = false;
 				console.log(
 					`[PERF:RENDERER] IPC: stopNativeScreenRecording: COMPLETED in ${(performance.now() - ipcStopStart).toFixed(2)}ms`,
@@ -1782,13 +1909,35 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
 				if (microphoneEnabled) {
 					try {
-						activeMicStream = await navigator.mediaDevices.getUserMedia({
-							audio: microphoneDeviceId ? { deviceId: { exact: microphoneDeviceId } } : true,
-							video: false,
-						});
+						const nsPrefs = loadNoiseSuppressionPreferences();
+						activeMicStream = await navigator.mediaDevices.getUserMedia(
+							createProcessedMicrophoneConstraints(
+								microphoneDeviceId,
+								nsPrefs.webcamNoiseSuppressionEnabled
+									? "no-noise-suppression"
+									: browserMicrophoneProfile.current,
+							),
+						);
+						let micAudioTracks = activeMicStream.getAudioTracks();
+						if (
+							nsPrefs.webcamNoiseSuppressionEnabled &&
+							nsPrefs.webcamNoiseSuppressionLevel > 0
+						) {
+							const nsSession = await createNoiseSuppressionSession(activeMicStream, {
+								enabled: true,
+								level: nsPrefs.webcamNoiseSuppressionLevel,
+								model: nsPrefs.model,
+							});
+							micNoiseSuppressionSession.current = nsSession;
+							await Promise.race([
+								nsSession.workletReady,
+								new Promise((resolve) => setTimeout(resolve, 250)),
+							]);
+							micAudioTracks = nsSession.outputStream.getAudioTracks();
+						}
 						streamToRecord = new MediaStream([
 							...camStream.getVideoTracks(),
-							...activeMicStream.getAudioTracks(),
+							...micAudioTracks,
 						]);
 					} catch (micErr) {
 						console.warn("Failed to attach microphone to camera recording:", micErr);
@@ -1801,6 +1950,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
 				const recorder = new MediaRecorder(streamToRecord, {
 					videoBitsPerSecond: 25_000_000,
+					...(streamToRecord.getAudioTracks().length > 0
+						? { audioBitsPerSecond: AUDIO_BITRATE_VOICE }
+						: {}),
 					...(mimeType ? { mimeType } : {}),
 				});
 
@@ -1810,6 +1962,10 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				};
 
 				recorder.onstop = async () => {
+					if (micNoiseSuppressionSession.current) {
+						micNoiseSuppressionSession.current.dispose();
+						micNoiseSuppressionSession.current = null;
+					}
 					if (activeMicStream) {
 						activeMicStream.getTracks().forEach((t) => t.stop());
 					}
@@ -2027,14 +2183,18 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 						console.info("Using browser microphone processing for this recording.");
 						let unownedMicStream: MediaStream | null = null;
 						try {
+							const nsPrefs = loadNoiseSuppressionPreferences();
 							const microphoneConstraints = createProcessedMicrophoneConstraints(
 								microphoneDeviceId,
-								browserMicrophoneProfile.current,
+								nsPrefs.enabled
+									? "no-noise-suppression"
+									: browserMicrophoneProfile.current,
 							);
 							micFallbackRequestedConstraints.current = microphoneConstraints;
 							const micStream =
 								await navigator.mediaDevices.getUserMedia(microphoneConstraints);
 							unownedMicStream = micStream;
+							micFallbackRawStream.current = micStream;
 							micFallbackTrackSettings.current =
 								createMicrophoneTrackSettingsSnapshot(micStream);
 							micFallbackAudioInputDevices.current =
@@ -2047,8 +2207,24 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 								"Browser microphone audio input devices:",
 								micFallbackAudioInputDevices.current,
 							);
+
+							let streamForMicRecorder: MediaStream = micStream;
+							if (nsPrefs.enabled && nsPrefs.level > 0) {
+								const nsSession = await createNoiseSuppressionSession(micStream, {
+									enabled: true,
+									level: nsPrefs.level,
+									model: nsPrefs.model,
+								});
+								micNoiseSuppressionSession.current = nsSession;
+								await Promise.race([
+									nsSession.workletReady,
+									new Promise((resolve) => setTimeout(resolve, 250)),
+								]);
+								streamForMicRecorder = nsSession.outputStream;
+							}
+
 							micFallbackChunks.current = [];
-							const recorder = new MediaRecorder(micStream, {
+							const recorder = new MediaRecorder(streamForMicRecorder, {
 								mimeType: "audio/webm;codecs=opus",
 								audioBitsPerSecond: AUDIO_BITRATE_VOICE,
 							});
@@ -2074,6 +2250,11 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 							micFallbackRequestedConstraints.current = null;
 							micFallbackAudioInputDevices.current = null;
 							micFallbackRecorderMetadata.current = null;
+							if (micNoiseSuppressionSession.current) {
+								micNoiseSuppressionSession.current.dispose();
+								micNoiseSuppressionSession.current = null;
+							}
+							micFallbackRawStream.current = null;
 							resetMicFallbackTimingDiagnostics();
 							console.warn("Browser microphone fallback failed:", micError);
 							const permissionDenied =
@@ -2230,14 +2411,36 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
 				stream.current.addTrack(videoTrack);
 
+				let processedMicStream: MediaStream | null = null;
 				if (microphoneEnabled) {
 					try {
+						const nsPrefs = loadNoiseSuppressionPreferences();
 						microphoneStream.current = await navigator.mediaDevices.getUserMedia(
 							createProcessedMicrophoneConstraints(
 								microphoneDeviceId,
-								browserMicrophoneProfile.current,
+								nsPrefs.enabled
+									? "no-noise-suppression"
+									: browserMicrophoneProfile.current,
 							),
 						);
+						if (nsPrefs.enabled && nsPrefs.level > 0) {
+							const nsSession = await createNoiseSuppressionSession(
+								microphoneStream.current,
+								{
+									enabled: true,
+									level: nsPrefs.level,
+									model: nsPrefs.model,
+								},
+							);
+							micNoiseSuppressionSession.current = nsSession;
+							await Promise.race([
+								nsSession.workletReady,
+								new Promise((resolve) => setTimeout(resolve, 250)),
+							]);
+							processedMicStream = nsSession.outputStream;
+						} else {
+							processedMicStream = microphoneStream.current;
+						}
 					} catch (audioError) {
 						console.warn("Failed to get microphone access:", audioError);
 						alert(
@@ -2248,7 +2451,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				}
 
 				const systemAudioTrack = screenMediaStream.getAudioTracks()[0];
-				const micAudioTrack = microphoneStream.current?.getAudioTracks()[0];
+				const micAudioTrack = processedMicStream?.getAudioTracks()[0];
 
 				if (systemAudioTrack && micAudioTrack) {
 					const context = new AudioContext({ sampleRate: 48000 });

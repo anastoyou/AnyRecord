@@ -64,6 +64,9 @@ export interface TimelineEditorProps {
 	onSelectCamera?: (id: string | null) => void;
 	cameraVideoPath?: string | null;
 	hasCameraTrack?: boolean;
+	showCameraAudioTrack?: boolean;
+	cameraAudioVolume?: number;
+	cameraAudioMuted?: boolean;
 	annotationRegions?: AnnotationRegion[];
 	onAnnotationAdded?: (span: Span, trackIndex?: number) => void;
 	onAnnotationSpanChange?: (id: string, span: Span, trackIndex?: number) => void;
@@ -167,6 +170,9 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			onSelectCamera,
 			cameraVideoPath,
 			hasCameraTrack = false,
+			showCameraAudioTrack = false,
+			cameraAudioVolume = 1,
+			cameraAudioMuted = false,
 			annotationRegions = [],
 			onAnnotationAdded,
 			onAnnotationSpanChange,
@@ -326,6 +332,25 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 				fallbackResources: systemSidecarFallbackPaths,
 				resourceVersion: sourceAudioResourceVersion,
 			},
+		);
+		const cameraAudioFallbackPaths = useMemo(
+			() => [
+				...micSidecarPaths,
+				...(videoPath ? [videoPath] : []),
+				...systemSidecarPaths,
+			],
+			[micSidecarPaths, systemSidecarPaths, videoPath],
+		);
+		const { peaks: cameraAudioPeaks } = useTimelineAudioPeaks(
+			hasCameraTrack && showCameraAudioTrack ? (cameraVideoPath ?? videoPath) : null,
+			{
+				fallbackResources: cameraAudioFallbackPaths,
+				resourceVersion: sourceAudioResourceVersion,
+			},
+		);
+		const cameraAudioLabel = useMemo(
+			() => t("effects.webcamAudio", "Camera Audio"),
+			[t],
 		);
 		const sourceAudioTracks = useMemo(
 			() =>
@@ -570,6 +595,11 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 							selectedClipId={selectedClipId}
 							hasCameraTrack={hasCameraTrack}
 							cameraVideoPath={cameraVideoPath}
+							showCameraAudioTrack={showCameraAudioTrack}
+							cameraAudioPeaks={cameraAudioPeaks}
+							cameraAudioVolume={cameraAudioVolume}
+							cameraAudioMuted={cameraAudioMuted}
+							cameraAudioLabel={cameraAudioLabel}
 							selectedCameraId={selectedCameraId}
 							onSelectCamera={handleSelectCamera}
 							selectedAnnotationId={selectedAnnotationId}
