@@ -762,6 +762,7 @@ interface Window {
 			options?: {
 				preserveProjectPath?: boolean;
 				hideOverlayCursorByDefault?: boolean;
+				recordingMode?: "screen-camera" | "camera-only" | "screen-only";
 			},
 		) => Promise<{ success: boolean; webcamPath: string | null }>;
 		setCurrentRecordingSession: (
@@ -770,6 +771,7 @@ interface Window {
 				webcamPath?: string | null;
 				timeOffsetMs?: number;
 				hideOverlayCursorByDefault?: boolean;
+				recordingMode?: "screen-camera" | "camera-only" | "screen-only";
 			},
 			options?: { preserveProjectPath?: boolean },
 		) => Promise<{ success: boolean }>;
@@ -780,6 +782,7 @@ interface Window {
 				webcamPath?: string | null;
 				timeOffsetMs?: number;
 				hideOverlayCursorByDefault?: boolean;
+				recordingMode?: "screen-camera" | "camera-only" | "screen-only";
 			};
 		}>;
 		getCurrentVideoPath: () => Promise<{ success: boolean; path?: string }>;

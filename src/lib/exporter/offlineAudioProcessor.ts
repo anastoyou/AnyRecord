@@ -45,6 +45,7 @@ export class OfflineAudioProcessor extends AudioMediaProcessor {
 		clipRegions: ClipRegion[] | undefined,
 		muxer: VideoMuxer,
 		audioPortions?: AudioPortion[],
+		webcamDenoise?: { enabled: boolean; level: number },
 	): Promise<void> {
 		const prepared = await this.prepareOfflineRender(
 			videoUrl,
@@ -56,6 +57,7 @@ export class OfflineAudioProcessor extends AudioMediaProcessor {
 			sourceAudioTrackSettings,
 			clipRegions,
 			audioPortions,
+			webcamDenoise,
 		);
 		if (this.cancelled) return;
 		await this.renderAndEncodeChunked(prepared, muxer);
@@ -71,6 +73,7 @@ export class OfflineAudioProcessor extends AudioMediaProcessor {
 		sourceAudioTrackSettings?: SourceAudioTrackSettings,
 		clipRegions?: ClipRegion[],
 		audioPortions?: AudioPortion[],
+		webcamDenoise?: { enabled: boolean; level: number },
 	): Promise<PreparedOfflineRender> {
 		if (this.cancelled) throw new Error("Export cancelled");
 		this.onProgress?.(0);
@@ -210,6 +213,7 @@ export class OfflineAudioProcessor extends AudioMediaProcessor {
 			outputDurationMs,
 			numChannels,
 			audioPortions,
+			webcamDenoise,
 		};
 	}
 
@@ -360,6 +364,7 @@ export class OfflineAudioProcessor extends AudioMediaProcessor {
 					prepared.mutedSourceOutputRangesSec,
 					prepared.audioPortions,
 					entry.trackId ?? "all",
+					prepared.webcamDenoise,
 				);
 			}
 

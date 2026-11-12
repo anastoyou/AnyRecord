@@ -377,6 +377,7 @@ export function EditorShell(props: Props) {
 							...settingsPanelProps,
 							onShowOnboarding: showOnboarding,
 						}}
+						isCameraOnly={project.recordingMode === "camera-only"}
 					/>
 					<EditorPreviewPanel
 						t={t}

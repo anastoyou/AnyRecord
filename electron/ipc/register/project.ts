@@ -816,7 +816,11 @@ export function registerProjectHandlers() {
 		async (
 			_,
 			path: string,
-			options?: { preserveProjectPath?: boolean; hideOverlayCursorByDefault?: boolean },
+			options?: {
+				preserveProjectPath?: boolean;
+				hideOverlayCursorByDefault?: boolean;
+				recordingMode?: "screen-camera" | "camera-only" | "screen-only";
+			},
 		) => {
 			setCurrentVideoPath(normalizeVideoSourcePath(path) ?? path);
 			approveUserPath(currentVideoPath);
@@ -831,6 +835,7 @@ export function registerProjectHandlers() {
 				hideOverlayCursorByDefault:
 					normalizeBoolean(options?.hideOverlayCursorByDefault) ||
 					normalizeBoolean(resolvedSession.hideOverlayCursorByDefault),
+				...(options?.recordingMode ? { recordingMode: options.recordingMode } : {}),
 			};
 
 			setCurrentRecordingSession(nextSession);
@@ -866,6 +871,7 @@ export function registerProjectHandlers() {
 				webcamPath?: string | null;
 				timeOffsetMs?: number;
 				hideOverlayCursorByDefault?: boolean;
+				recordingMode?: "screen-camera" | "camera-only" | "screen-only";
 			},
 			options?: { preserveProjectPath?: boolean },
 		) => {
@@ -877,6 +883,7 @@ export function registerProjectHandlers() {
 				webcamPath: normalizeVideoSourcePath(session.webcamPath ?? null),
 				timeOffsetMs: normalizeRecordingTimeOffsetMs(session.timeOffsetMs),
 				hideOverlayCursorByDefault: normalizeBoolean(session.hideOverlayCursorByDefault),
+				recordingMode: session.recordingMode,
 			});
 			await rememberApprovedLocalReadPath(currentRecordingSession!.videoPath);
 			await rememberApprovedLocalReadPath(currentRecordingSession!.webcamPath);

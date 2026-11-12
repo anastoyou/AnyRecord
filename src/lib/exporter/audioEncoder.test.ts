@@ -65,6 +65,40 @@ describe("AudioProcessor offline render preparation", () => {
 			undefined, undefined, clips, muxer);
 	});
 
+	it("routes webcam noise suppression through offline audio rendering", async () => {
+		const processor = new AudioProcessor();
+		const render = vi.spyOn(processor as unknown as OfflineRenderTestHarness,
+			"renderAndMuxOfflineAudio").mockResolvedValue();
+		const muxer = {} as never;
+		await processor.process(
+			null,
+			muxer,
+			"recording.mp4",
+			[],
+			[],
+			undefined,
+			[],
+			["/path/to/recording.mic.wav"],
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			{ noiseSuppressionEnabled: true, noiseSuppressionLevel: 80 } as never,
+		);
+		expect(render).toHaveBeenCalledWith(
+			"recording.mp4",
+			[],
+			[],
+			[],
+			["/path/to/recording.mic.wav"],
+			undefined,
+			undefined,
+			undefined,
+			muxer,
+			{ enabled: true, level: 80 },
+		);
+	});
+
 	it("rejects a cancelled chunked render instead of returning a partial WAV", async () => {
 		const processor = new AudioProcessor() as unknown as OfflineRenderTestHarness;
 		vi.spyOn(processor, "prepareOfflineRender").mockResolvedValue({

@@ -10,6 +10,7 @@ import type { VideoPlaybackRef } from "../VideoPlayback";
 type SessionPresentation = {
 	hideOverlayCursorByDefault?: boolean;
 	nativeCaptureUnavailable?: boolean;
+	recordingMode?: "screen-camera" | "camera-only" | "screen-only";
 };
 
 export function useEditorUiState(
@@ -92,6 +93,9 @@ export function useEditorUiState(
 			setSessionShowCursorOverride(session?.hideOverlayCursorByDefault ? false : null);
 			setSessionNativeCaptureUnavailable(Boolean(session?.nativeCaptureUnavailable));
 			setNativeCaptureUnavailableModalOpen(Boolean(session?.nativeCaptureUnavailable));
+			if (session?.recordingMode === "camera-only") {
+				setActiveEffectSection("audio");
+			}
 		},
 		[],
 	);

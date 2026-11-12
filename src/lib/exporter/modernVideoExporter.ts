@@ -850,6 +850,7 @@ export class ModernVideoExporter {
 									this.config.sourceAudioTrackSettings,
 									this.config.clipRegions,
 									this.config.audioPortions,
+									this.config.webcam,
 								),
 								"audio processing",
 								"audio",
@@ -1496,6 +1497,11 @@ export class ModernVideoExporter {
 			return { audioMode: "none" };
 		}
 
+		const hasWebcamNoiseSuppression = Boolean(
+			this.config.webcam?.noiseSuppressionEnabled &&
+				(this.config.webcam?.noiseSuppressionLevel ?? 0) > 0,
+		);
+
 		if (
 			requiresClipTimelineRendering(this.config.clipRegions) ||
 			speedRegions.length > 0 ||
@@ -1503,7 +1509,8 @@ export class ModernVideoExporter {
 			sourceAudioFallbackPaths.length > 1 ||
 			hasTimedSourceAudioFallback ||
 			hasNonDefaultSourceTrackSettings(this.config.sourceAudioTrackSettings) ||
-			(this.config.clipRegions ?? []).some((clip) => Boolean(clip.muted))
+			(this.config.clipRegions ?? []).some((clip) => Boolean(clip.muted)) ||
+			hasWebcamNoiseSuppression
 		) {
 			const sourceDurationMs = Math.max(
 				0,
@@ -1526,7 +1533,8 @@ export class ModernVideoExporter {
 			const requiresRenderedEditedTrack =
 				requiresClipTimelineRendering(this.config.clipRegions) ||
 				hasNonDefaultSourceTrackSettings(this.config.sourceAudioTrackSettings) ||
-				(this.config.clipRegions ?? []).some((clip) => Boolean(clip.muted));
+				(this.config.clipRegions ?? []).some((clip) => Boolean(clip.muted)) ||
+				hasWebcamNoiseSuppression;
 			const strategy =
 				canUsePrimaryAudioFiltergraph && !requiresRenderedEditedTrack
 					? classifyEditedTrackStrategy({

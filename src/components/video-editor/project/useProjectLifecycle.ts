@@ -127,6 +127,7 @@ export function useProjectLifecycle(input: Input) {
 		project.setVideoSourcePath(sourcePath);
 		project.setCurrentProjectPath(path ?? null);
 		project.setVideoPath(videoUrl);
+		project.setRecordingMode(editor.recordingMode ?? null);
 
 		appearance.setWallpaper(editor.wallpaper);
 		appearance.setShadowIntensity(editor.shadowIntensity);

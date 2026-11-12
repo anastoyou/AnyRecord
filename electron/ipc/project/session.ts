@@ -26,7 +26,7 @@ export async function persistRecordingSessionManifest(
 	const normalizedWebcamPath = normalizeVideoSourcePath(session.webcamPath ?? null);
 	const manifestPath = getRecordingSessionManifestPath(normalizedVideoPath);
 
-	if (!normalizedWebcamPath) {
+	if (!normalizedWebcamPath && session.recordingMode !== "camera-only") {
 		await fs.rm(manifestPath, { force: true });
 		return;
 	}
@@ -34,8 +34,9 @@ export async function persistRecordingSessionManifest(
 	const manifest: RecordingSessionManifest = {
 		version: 2,
 		videoFileName: path.basename(normalizedVideoPath),
-		webcamFileName: path.basename(normalizedWebcamPath),
+		webcamFileName: normalizedWebcamPath ? path.basename(normalizedWebcamPath) : null,
 		timeOffsetMs: normalizeRecordingTimeOffsetMs(session.timeOffsetMs),
+		...(session.recordingMode ? { recordingMode: session.recordingMode } : {}),
 	};
 
 	await fs.writeFile(manifestPath, JSON.stringify(manifest, null, 2), "utf-8");
@@ -79,6 +80,7 @@ export async function resolveRecordingSessionManifest(
 				videoPath: normalizedVideoPath,
 				webcamPath: null,
 				timeOffsetMs: normalizeRecordingTimeOffsetMs(parsed.timeOffsetMs),
+				...(parsed.recordingMode ? { recordingMode: parsed.recordingMode } : {}),
 			};
 		}
 
@@ -92,6 +94,7 @@ export async function resolveRecordingSessionManifest(
 			videoPath: normalizedVideoPath,
 			webcamPath: webcamExists ? webcamPath : null,
 			timeOffsetMs: normalizeRecordingTimeOffsetMs(parsed.timeOffsetMs),
+			...(parsed.recordingMode ? { recordingMode: parsed.recordingMode } : {}),
 		};
 	} catch {
 		return null;

@@ -371,6 +371,7 @@ function LaunchWindowContent() {
 
 			<MicPopover
 				disabled={recording}
+				hideSystemAudio={recordingMode === "camera-only"}
 				systemAudioEnabled={systemAudioEnabled}
 				onToggleSystemAudio={() => setSystemAudioEnabled(!systemAudioEnabled)}
 				microphoneEnabled={microphoneEnabled}
@@ -410,6 +411,7 @@ function LaunchWindowContent() {
 
 			<WebcamPopover
 				disabled={recording}
+				cameraOnly={recordingMode === "camera-only"}
 				webcamEnabled={webcamEnabled}
 				onDisableWebcam={() => setWebcamEnabled(false)}
 				canToggleFloatingPreview={canToggleFloatingWebcamPreview(

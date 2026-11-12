@@ -11,7 +11,7 @@ import {
 	Label,
 } from "@heroui/react";
 import type { ComponentProps, ReactNode } from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { useI18n } from "@/contexts/I18nContext";
 import ExtensionManager from "../ExtensionManager";
 import { SettingsPanel } from "../SettingsPanel";
@@ -25,6 +25,7 @@ type Props = {
 	activeSection: EditorEffectSection;
 	setActiveSection: (section: EditorEffectSection) => void;
 	settingsPanelProps: ComponentProps<typeof SettingsPanel>;
+	isCameraOnly?: boolean;
 };
 
 export function EditorSidebar({
@@ -35,6 +36,7 @@ export function EditorSidebar({
 	settingsPanelProps,
 	panelContent,
 	onAccountClick,
+	isCameraOnly,
 }: Props) {
 	const [advancedSections, setAdvancedSections] = useState<Record<string, boolean>>({});
 	const advanced = advancedSections[activeSection] ?? false;
@@ -43,8 +45,21 @@ export function EditorSidebar({
 		["scene", "frame", "crop", "cursor", "webcam", "audio", "gestures", "captions", "settings", "zoom"].includes(
 			activeSection,
 		);
-	const sections = useMemo(
-		() => [
+
+	useEffect(() => {
+		if (
+			isCameraOnly &&
+			(activeSection === "scene" ||
+				activeSection === "cursor" ||
+				activeSection === "webcam" ||
+				activeSection === "gestures")
+		) {
+			setActiveSection("audio");
+		}
+	}, [isCameraOnly, activeSection, setActiveSection]);
+
+	const sections = useMemo(() => {
+		const allSections = [
 			{
 				id: "scene" as const,
 				label: t("settings.sections.scene", "Scene"),
@@ -68,9 +83,14 @@ export function EditorSidebar({
 				label: t("settings.sections.settings", "Settings"),
 				icon: Gear,
 			},
-		],
-		[t],
-	);
+		];
+		if (isCameraOnly) {
+			return allSections.filter((section) =>
+				["audio", "captions", "settings"].includes(section.id),
+			);
+		}
+		return allSections;
+	}, [t, isCameraOnly]);
 	return (
 		<div className="flex min-h-0 shrink-0 pb-3 pr-2">
 			<nav

@@ -764,29 +764,27 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	}, []);
 
 	const finalizeRecordingSession = useCallback(
-		async (videoPath: string, webcamPath: string | null) => {
+		async (videoPath: string, webcamPath: string | null, explicitMode?: RecordingMode) => {
 			const start = performance.now();
 			console.log("[PERF:RENDERER] Finalize Session & Switch to Editor: STARTED");
-			const shouldHideOverlayCursor = hideEditorOverlayCursorByDefault.current;
+			const mode = explicitMode ?? recordingMode;
+			const shouldHideOverlayCursor =
+				hideEditorOverlayCursorByDefault.current || mode === "camera-only";
 			try {
-				if (webcamPath) {
-					await window.electronAPI.setCurrentRecordingSession({
-						videoPath,
-						webcamPath,
-						timeOffsetMs: webcamTimeOffsetMs.current,
-						hideOverlayCursorByDefault: shouldHideOverlayCursor,
-					});
-				} else {
-					await window.electronAPI.setCurrentVideoPath(videoPath, {
-						hideOverlayCursorByDefault: shouldHideOverlayCursor,
-					});
-				}
+				await window.electronAPI.setCurrentRecordingSession({
+					videoPath,
+					webcamPath,
+					timeOffsetMs: webcamPath ? webcamTimeOffsetMs.current : 0,
+					hideOverlayCursorByDefault: shouldHideOverlayCursor,
+					recordingMode: mode,
+				});
 			} catch (error) {
 				console.error("Failed to persist recording session metadata:", error);
 
 				try {
 					await window.electronAPI.setCurrentVideoPath(videoPath, {
 						hideOverlayCursorByDefault: shouldHideOverlayCursor,
+						recordingMode: mode,
 					});
 				} catch (fallbackError) {
 					console.error("Failed to persist fallback video path:", fallbackError);
@@ -799,7 +797,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				`[PERF:RENDERER] Finalize Session & Switch to Editor: COMPLETED in ${(performance.now() - start).toFixed(2)}ms`,
 			);
 		},
-		[],
+		[recordingMode],
 	);
 
 	const closeMicFallbackPauseInterval = useCallback((now = performance.now()) => {
@@ -1101,22 +1099,25 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			if (microphoneEnabled) {
 				try {
 					const nsPrefs = loadNoiseSuppressionPreferences();
+					const isNoiseSuppressionActive = Boolean(
+						(nsPrefs.enabled || nsPrefs.webcamNoiseSuppressionEnabled) &&
+						(nsPrefs.level > 0 || nsPrefs.webcamNoiseSuppressionLevel > 0),
+					);
+					const activeLevel =
+						nsPrefs.level > 0 ? nsPrefs.level : nsPrefs.webcamNoiseSuppressionLevel;
 					const webcamMicRaw = await navigator.mediaDevices.getUserMedia(
 						createProcessedMicrophoneConstraints(
 							microphoneDeviceId,
-							nsPrefs.webcamNoiseSuppressionEnabled
+							isNoiseSuppressionActive
 								? "no-noise-suppression"
 								: browserMicrophoneProfile.current,
 						),
 					);
 					webcamAudioRawStream.current = webcamMicRaw;
-					if (
-						nsPrefs.webcamNoiseSuppressionEnabled &&
-						nsPrefs.webcamNoiseSuppressionLevel > 0
-					) {
+					if (isNoiseSuppressionActive) {
 						const nsSession = await createNoiseSuppressionSession(webcamMicRaw, {
 							enabled: true,
-							level: nsPrefs.webcamNoiseSuppressionLevel,
+							level: activeLevel,
 							model: nsPrefs.model,
 						});
 						webcamNoiseSuppressionSession.current = nsSession;
@@ -1910,22 +1911,25 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				if (microphoneEnabled) {
 					try {
 						const nsPrefs = loadNoiseSuppressionPreferences();
+						const isNoiseSuppressionActive = Boolean(
+							(nsPrefs.enabled || nsPrefs.webcamNoiseSuppressionEnabled) &&
+							(nsPrefs.level > 0 || nsPrefs.webcamNoiseSuppressionLevel > 0),
+						);
+						const activeLevel =
+							nsPrefs.level > 0 ? nsPrefs.level : nsPrefs.webcamNoiseSuppressionLevel;
 						activeMicStream = await navigator.mediaDevices.getUserMedia(
 							createProcessedMicrophoneConstraints(
 								microphoneDeviceId,
-								nsPrefs.webcamNoiseSuppressionEnabled
+								isNoiseSuppressionActive
 									? "no-noise-suppression"
 									: browserMicrophoneProfile.current,
 							),
 						);
 						let micAudioTracks = activeMicStream.getAudioTracks();
-						if (
-							nsPrefs.webcamNoiseSuppressionEnabled &&
-							nsPrefs.webcamNoiseSuppressionLevel > 0
-						) {
+						if (isNoiseSuppressionActive) {
 							const nsSession = await createNoiseSuppressionSession(activeMicStream, {
 								enabled: true,
-								level: nsPrefs.webcamNoiseSuppressionLevel,
+								level: activeLevel,
 								model: nsPrefs.model,
 							});
 							micNoiseSuppressionSession.current = nsSession;
@@ -2006,7 +2010,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 						}
 
 						const finalVideoPath = videoResult.path;
-						await finalizeRecordingSession(finalVideoPath, null);
+						await finalizeRecordingSession(finalVideoPath, null, "camera-only");
 					} catch (err) {
 						console.error("Error finalizing camera recording:", err);
 						await notifyRecordingFinalizationFailure("Failed to finalize camera recording.");
@@ -2067,6 +2071,11 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			let nativeWindowsCaptureStartFailed = false;
 
 			if (useNativeCapture) {
+				const nsPrefs = loadNoiseSuppressionPreferences();
+				const isNoiseSuppressionActive = Boolean(
+					(nsPrefs.enabled || nsPrefs.webcamNoiseSuppressionEnabled) &&
+					(nsPrefs.level > 0 || nsPrefs.webcamNoiseSuppressionLevel > 0),
+				);
 				const nativeResult = await window.electronAPI.startNativeScreenRecording(
 					selectedSource,
 					{
@@ -2074,6 +2083,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 						capturesMicrophone: microphoneEnabled,
 						microphoneDeviceId,
 						microphoneLabel: micLabel,
+						preferBrowserMicrophone: microphoneEnabled && isNoiseSuppressionActive,
 					},
 				);
 				if (nativeResult.success && startWasCancelled()) {
@@ -2184,9 +2194,15 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 						let unownedMicStream: MediaStream | null = null;
 						try {
 							const nsPrefs = loadNoiseSuppressionPreferences();
+							const isNoiseSuppressionActive = Boolean(
+								(nsPrefs.enabled || nsPrefs.webcamNoiseSuppressionEnabled) &&
+								(nsPrefs.level > 0 || nsPrefs.webcamNoiseSuppressionLevel > 0),
+							);
+							const activeLevel =
+								nsPrefs.level > 0 ? nsPrefs.level : nsPrefs.webcamNoiseSuppressionLevel;
 							const microphoneConstraints = createProcessedMicrophoneConstraints(
 								microphoneDeviceId,
-								nsPrefs.enabled
+								isNoiseSuppressionActive
 									? "no-noise-suppression"
 									: browserMicrophoneProfile.current,
 							);
@@ -2209,10 +2225,10 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 							);
 
 							let streamForMicRecorder: MediaStream = micStream;
-							if (nsPrefs.enabled && nsPrefs.level > 0) {
+							if (isNoiseSuppressionActive) {
 								const nsSession = await createNoiseSuppressionSession(micStream, {
 									enabled: true,
-									level: nsPrefs.level,
+									level: activeLevel,
 									model: nsPrefs.model,
 								});
 								micNoiseSuppressionSession.current = nsSession;
@@ -2415,20 +2431,26 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				if (microphoneEnabled) {
 					try {
 						const nsPrefs = loadNoiseSuppressionPreferences();
+						const isNoiseSuppressionActive = Boolean(
+							(nsPrefs.enabled || nsPrefs.webcamNoiseSuppressionEnabled) &&
+							(nsPrefs.level > 0 || nsPrefs.webcamNoiseSuppressionLevel > 0),
+						);
+						const activeLevel =
+							nsPrefs.level > 0 ? nsPrefs.level : nsPrefs.webcamNoiseSuppressionLevel;
 						microphoneStream.current = await navigator.mediaDevices.getUserMedia(
 							createProcessedMicrophoneConstraints(
 								microphoneDeviceId,
-								nsPrefs.enabled
+								isNoiseSuppressionActive
 									? "no-noise-suppression"
 									: browserMicrophoneProfile.current,
 							),
 						);
-						if (nsPrefs.enabled && nsPrefs.level > 0) {
+						if (isNoiseSuppressionActive) {
 							const nsSession = await createNoiseSuppressionSession(
 								microphoneStream.current,
 								{
 									enabled: true,
-									level: nsPrefs.level,
+									level: activeLevel,
 									model: nsPrefs.model,
 								},
 							);

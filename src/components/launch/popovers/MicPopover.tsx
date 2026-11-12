@@ -29,6 +29,7 @@ export function MicPopover({
 	microphoneDeviceId,
 	selectedDeviceId,
 	onSelectDevice,
+	hideSystemAudio,
 }: {
 	trigger: ReactElement;
 	disabled?: boolean;
@@ -40,6 +41,7 @@ export function MicPopover({
 	microphoneDeviceId?: string;
 	selectedDeviceId?: string;
 	onSelectDevice: (deviceId: string) => void;
+	hideSystemAudio?: boolean;
 }) {
 	const t = useScopedT("launch");
 	const { isOpen, requestOpen, requestClose } = useLaunchPopoverCoordinator();
@@ -84,21 +86,23 @@ export function MicPopover({
 			) : (
 				<>
 					<div className={styles.ddLabel}>{t("recording.microphone")}</div>
-					<DropdownItem
-						icon={
-							systemAudioEnabled ? (
-								<SpeakerHighIcon size={16} />
-							) : (
-								<SpeakerXIcon size={16} />
-							)
-						}
-						selected={systemAudioEnabled}
-						onClick={onToggleSystemAudio}
-					>
-						{systemAudioEnabled
-							? t("recording.disableSystemAudio")
-							: t("recording.enableSystemAudio")}
-					</DropdownItem>
+					{!hideSystemAudio && (
+						<DropdownItem
+							icon={
+								systemAudioEnabled ? (
+									<SpeakerHighIcon size={16} />
+								) : (
+									<SpeakerXIcon size={16} />
+								)
+							}
+							selected={systemAudioEnabled}
+							onClick={onToggleSystemAudio}
+						>
+							{systemAudioEnabled
+								? t("recording.disableSystemAudio")
+								: t("recording.enableSystemAudio")}
+						</DropdownItem>
+					)}
 					<div className="flex h-9 items-center justify-between gap-2 rounded-lg px-3 text-sm">
 						<div className="flex items-center gap-3 min-w-0">
 							<MagicWand size={16} className="shrink-0" />

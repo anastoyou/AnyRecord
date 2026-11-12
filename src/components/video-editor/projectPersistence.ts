@@ -145,6 +145,7 @@ export interface ProjectEditorState {
 	aspectRatio: AspectRatio;
 	sourceAudioTrackSettingsByClip?: Record<string, SourceAudioTrackSettings>;
 	defaultSourceAudioTrackSettings?: SourceAudioTrackSettings;
+	recordingMode?: "screen-camera" | "camera-only" | "screen-only";
 }
 
 export interface EditorProjectData {
@@ -1364,6 +1365,11 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 				isCustomAspectRatio(editor.aspectRatio))
 				? (editor.aspectRatio as AspectRatio)
 				: "16:9",
+		...(editor.recordingMode === "camera-only" ||
+		editor.recordingMode === "screen-only" ||
+		editor.recordingMode === "screen-camera"
+			? { recordingMode: editor.recordingMode }
+			: {}),
 	};
 }
 

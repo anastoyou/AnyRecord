@@ -1,5 +1,6 @@
 /* biome-ignore-all lint/correctness/useExhaustiveDependencies: editor state setters are stable and initial source loading intentionally runs once per launch configuration. */
 import { type MutableRefObject, useEffect, useRef } from "react";
+import { loadNoiseSuppressionPreferences } from "@/hooks/useNoiseSuppressionPreferences";
 import { fromFileUrl, resolveVideoUrl } from "../projectPersistence";
 import type { getDevOpenRecordingConfig, getSmokeExportConfig } from "../smokeExportConfig";
 import type { useAppearanceState } from "../state/useAppearanceState";
@@ -10,6 +11,7 @@ import { DEFAULT_WEBCAM_TIME_OFFSET_MS } from "../types";
 type SessionPresentation = {
 	hideOverlayCursorByDefault?: boolean;
 	nativeCaptureUnavailable?: boolean;
+	recordingMode?: "screen-camera" | "camera-only" | "screen-only";
 };
 
 type Input = {
@@ -96,12 +98,17 @@ export function useInitialEditorSource({
 					resetSourceScopedEditorState();
 					pendingFreshRecordingAutoZoomPathRef.current =
 						appearance.autoApplyFreshRecordingAutoZooms ? sourceUrl : null;
+					const nsPrefs = loadNoiseSuppressionPreferences();
 					appearance.setWebcam((previous) => ({
 						...previous,
 						visibleRanges: undefined,
 						enabled: Boolean(webcamPath),
 						sourcePath: webcamPath,
 						timeOffsetMs: DEFAULT_WEBCAM_TIME_OFFSET_MS,
+						noiseSuppressionEnabled:
+							nsPrefs.enabled || nsPrefs.webcamNoiseSuppressionEnabled,
+						noiseSuppressionLevel:
+							nsPrefs.level > 0 ? nsPrefs.level : nsPrefs.webcamNoiseSuppressionLevel,
 					}));
 					project.setError(null);
 					return;
@@ -132,6 +139,7 @@ export function useInitialEditorSource({
 					project.setLastSavedSnapshot(null);
 					resetSourceScopedEditorState();
 					pendingFreshRecordingAutoZoomPathRef.current = null;
+					const nsPrefs = loadNoiseSuppressionPreferences();
 					appearance.setWebcam((previous) => ({
 						...previous,
 						visibleRanges: undefined,
@@ -142,6 +150,10 @@ export function useInitialEditorSource({
 						size: smokeConfig.webcamSize ?? previous.size,
 						width: smokeConfig.webcamSize ?? previous.width ?? previous.size,
 						height: smokeConfig.webcamSize ?? previous.height ?? previous.size,
+						noiseSuppressionEnabled:
+							nsPrefs.enabled || nsPrefs.webcamNoiseSuppressionEnabled,
+						noiseSuppressionLevel:
+							nsPrefs.level > 0 ? nsPrefs.level : nsPrefs.webcamNoiseSuppressionLevel,
 					}));
 					project.setError(null);
 					return;
@@ -179,13 +191,26 @@ export function useInitialEditorSource({
 					pendingFreshRecordingAutoZoomPathRef.current =
 						appearance.autoApplyFreshRecordingAutoZooms ? sourceUrl : null;
 					applySessionPresentation(activeSession);
+					const isCameraOnly = activeSession?.recordingMode === "camera-only";
+					project.setRecordingMode(activeSession?.recordingMode ?? null);
+					if (isCameraOnly) {
+						appearance.setPadding({ top: 0, bottom: 0, left: 0, right: 0, linked: true });
+						appearance.setBorderRadius(0);
+						appearance.setShadowIntensity(0);
+						appearance.setShowCursor(false);
+					}
+					const nsPrefs = loadNoiseSuppressionPreferences();
 					appearance.setWebcam((previous) => ({
 						...previous,
 						visibleRanges: undefined,
-						enabled: Boolean(resolvedWebcamPath),
-						sourcePath: resolvedWebcamPath,
+						enabled: !isCameraOnly && Boolean(resolvedWebcamPath),
+						sourcePath: isCameraOnly ? null : resolvedWebcamPath,
 						timeOffsetMs:
 							activeSession?.timeOffsetMs ?? DEFAULT_WEBCAM_TIME_OFFSET_MS,
+						noiseSuppressionEnabled:
+							nsPrefs.enabled || nsPrefs.webcamNoiseSuppressionEnabled,
+						noiseSuppressionLevel:
+							nsPrefs.level > 0 ? nsPrefs.level : nsPrefs.webcamNoiseSuppressionLevel,
 					}));
 					return;
 				}
@@ -233,6 +258,7 @@ export function useInitialEditorSource({
 						videoPath?: string | null;
 						webcamPath?: string | null;
 						timeOffsetMs?: number;
+						recordingMode?: "screen-camera" | "camera-only" | "screen-only";
 				  }
 				| null
 				| undefined,
@@ -240,7 +266,25 @@ export function useInitialEditorSource({
 			const sessionSourcePath = session?.videoPath ? fromFileUrl(session.videoPath) : null;
 			const webcamPath = session?.webcamPath ? fromFileUrl(session.webcamPath) : null;
 			if (!session || !videoSourcePath || sessionSourcePath !== videoSourcePath) return;
+			const isCameraOnly = session.recordingMode === "camera-only";
+			project.setRecordingMode(session.recordingMode ?? null);
+			if (isCameraOnly) {
+				appearance.setPadding({ top: 0, bottom: 0, left: 0, right: 0, linked: true });
+				appearance.setBorderRadius(0);
+				appearance.setShadowIntensity(0);
+				appearance.setShowCursor(false);
+			}
+			const nsPrefs = loadNoiseSuppressionPreferences();
 			appearance.setWebcam((previous) => {
+				if (isCameraOnly) {
+					if (!previous.enabled && !previous.sourcePath) return previous;
+					return {
+						...previous,
+						visibleRanges: undefined,
+						enabled: false,
+						sourcePath: null,
+					};
+				}
 				if (previous.sourcePath === webcamPath && previous.enabled === Boolean(webcamPath)) {
 					return previous;
 				}
@@ -252,6 +296,10 @@ export function useInitialEditorSource({
 					timeOffsetMs: webcamPath
 						? (session.timeOffsetMs ?? previous.timeOffsetMs)
 						: DEFAULT_WEBCAM_TIME_OFFSET_MS,
+					noiseSuppressionEnabled:
+						nsPrefs.enabled || nsPrefs.webcamNoiseSuppressionEnabled,
+					noiseSuppressionLevel:
+						nsPrefs.level > 0 ? nsPrefs.level : nsPrefs.webcamNoiseSuppressionLevel,
 				};
 			});
 			timeline.setSourceAudioFallbackRefreshKey((key) => key + 1);

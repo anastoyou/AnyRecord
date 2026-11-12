@@ -19,6 +19,9 @@ export function useProjectState() {
 	const [unsavedChangesDialogActionLabel, setUnsavedChangesDialogActionLabel] =
 		useState("continue");
 	const [lastSavedSnapshot, setLastSavedSnapshot] = useState<EditorProjectData | null>(null);
+	const [recordingMode, setRecordingMode] = useState<
+		"screen-camera" | "camera-only" | "screen-only" | null
+	>(null);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 
@@ -53,6 +56,8 @@ export function useProjectState() {
 		setUnsavedChangesDialogActionLabel,
 		lastSavedSnapshot,
 		setLastSavedSnapshot,
+		recordingMode,
+		setRecordingMode,
 		loading,
 		setLoading,
 		error,

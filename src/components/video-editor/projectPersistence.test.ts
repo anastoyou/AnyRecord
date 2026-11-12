@@ -304,3 +304,16 @@ it("ignores legacy export preferences when opening and resaving a project", asyn
 	}
 	expect(legacyEditor.exportQuality).toBe("high");
 });
+
+test("preserves recordingMode when normalized", () => {
+	expect(normalizeProjectEditor({ recordingMode: "camera-only" }).recordingMode).toBe(
+		"camera-only",
+	);
+	expect(normalizeProjectEditor({ recordingMode: "screen-only" }).recordingMode).toBe(
+		"screen-only",
+	);
+	expect(normalizeProjectEditor({ recordingMode: "screen-camera" }).recordingMode).toBe(
+		"screen-camera",
+	);
+	expect(normalizeProjectEditor({ recordingMode: "invalid" as any }).recordingMode).toBeUndefined();
+});

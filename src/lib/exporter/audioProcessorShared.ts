@@ -126,6 +126,7 @@ export interface PreparedOfflineRender {
 	outputDurationMs: number;
 	numChannels: number;
 	audioPortions?: AudioPortion[];
+	webcamDenoise?: { enabled: boolean; level: number };
 }
 
 export async function isAacAudioEncodingSupported(

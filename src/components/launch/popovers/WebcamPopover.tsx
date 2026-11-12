@@ -26,6 +26,7 @@ export function WebcamPopover({
 	webcamDeviceId,
 	selectedVideoDeviceId,
 	onSelectVideoDevice,
+	cameraOnly = false,
 }: {
 	trigger: ReactElement;
 	disabled?: boolean;
@@ -40,6 +41,7 @@ export function WebcamPopover({
 	webcamDeviceId?: string;
 	selectedVideoDeviceId?: string;
 	onSelectVideoDevice: (deviceId: string) => void;
+	cameraOnly?: boolean;
 }) {
 	const t = useScopedT("launch");
 	const { isOpen, requestOpen, requestClose } = useLaunchPopoverCoordinator();
@@ -64,7 +66,7 @@ export function WebcamPopover({
 			<div className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--launch-label)]">
 				{t("recording.webcam")}
 			</div>
-			{webcamEnabled && (
+			{!cameraOnly && webcamEnabled && (
 				<>
 					<DropdownItem
 						icon={<VideoOff size={16} />}
@@ -90,12 +92,12 @@ export function WebcamPopover({
 					) : null}
 				</>
 			)}
-			{!webcamEnabled && (
+			{!cameraOnly && !webcamEnabled && (
 				<div className="px-3 py-2 text-xs text-[var(--launch-text-muted)]">
 					{t("recording.selectWebcamToEnable")}
 				</div>
 			)}
-			{showWebcamControls && (
+			{!cameraOnly && showWebcamControls && (
 				<div className="flex justify-center px-3 py-2">
 					<div className="h-24 w-24 overflow-hidden rounded-2xl bg-[var(--launch-hover)] ring-1 ring-[var(--launch-border-strong)]">
 						<video

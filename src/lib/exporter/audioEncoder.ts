@@ -6,6 +6,7 @@ import type {
 	ClipRegion,
 	SourceAudioTrackSettings,
 	SpeedRegion,
+	WebcamOverlaySettings,
 } from "@/components/video-editor/types";
 import { resolveSourceTrackRoutingPolicy } from "./sourceTrackRoutingPolicy";
 import { AudioTranscodeProcessor } from "./audioTranscodeProcessor";
@@ -115,6 +116,7 @@ export class AudioProcessor extends AudioTranscodeProcessor {
 		sourceAudioTrackSettings?: SourceAudioTrackSettings,
 		clipRegions?: ClipRegion[],
 		audioPortions?: AudioPortion[],
+		webcam?: WebcamOverlaySettings,
 	): Promise<void> {
 		const sortedTrims = trimRegions
 			? [...trimRegions].sort((a, b) => a.startMs - b.startMs)
@@ -150,6 +152,10 @@ export class AudioProcessor extends AudioTranscodeProcessor {
 			requiresLegacyMacMicSidecarMix ||
 			hasTimedCompanionAudio;
 
+		const hasWebcamNoiseSuppression = Boolean(
+			webcam?.noiseSuppressionEnabled && (webcam?.noiseSuppressionLevel ?? 0) > 0,
+		);
+
 		// When speed edits, audio regions, or multiple audio sources need mixing, use offline AudioContext pipeline.
 		if (
 			requiresClipTimelineRendering(clipRegions) ||
@@ -158,7 +164,8 @@ export class AudioProcessor extends AudioTranscodeProcessor {
 			needsSourceAudioMixing ||
 			hasNonDefaultSourceTrackSettings(sourceAudioTrackSettings) ||
 			(clipRegions ?? []).some((clip) => Boolean(clip.muted)) ||
-			(audioPortions && audioPortions.length > 0)
+			(audioPortions && audioPortions.length > 0) ||
+			hasWebcamNoiseSuppression
 		) {
 			await this.renderAndMuxOfflineAudio(
 				videoUrl,
@@ -171,6 +178,14 @@ export class AudioProcessor extends AudioTranscodeProcessor {
 				clipRegions,
 				muxer,
 				...(audioPortions ? [audioPortions] : []),
+				...(webcam
+					? [
+							{
+								enabled: Boolean(webcam.noiseSuppressionEnabled),
+								level: webcam.noiseSuppressionLevel ?? 75,
+							},
+						]
+					: []),
 			);
 			return;
 		}

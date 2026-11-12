@@ -79,6 +79,7 @@ export type RecordingSessionData = {
 	webcamPath?: string | null;
 	timeOffsetMs?: number;
 	hideOverlayCursorByDefault?: boolean;
+	recordingMode?: "screen-camera" | "camera-only" | "screen-only";
 };
 
 export type PauseSegment = {
@@ -91,6 +92,7 @@ export type RecordingSessionManifest = {
 	videoFileName: string;
 	webcamFileName?: string | null;
 	timeOffsetMs?: number;
+	recordingMode?: "screen-camera" | "camera-only" | "screen-only";
 };
 
 export type ProjectLibraryEntry = {

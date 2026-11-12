@@ -88,6 +88,7 @@ export class AudioTimelineProcessor extends AudioProcessorBase {
 		mutedOutputRangesSec: Array<{ startSec: number; endSec: number }> = [],
 		audioPortions: AudioPortion[] = [],
 		targetTrack = "all",
+		webcamDenoise?: { enabled: boolean; level: number },
 	): void {
 		let outputOffsetSec = 0;
 
@@ -215,7 +216,51 @@ export class AudioTimelineProcessor extends AudioProcessorBase {
 
 				source.buffer = stretchedBuffer;
 				source.playbackRate.value = 1;
-				source.connect(gainNode);
+
+				const isDenoiseTrack = targetTrack === "mic" || targetTrack === "webcam";
+				const denoiseRatio = webcamDenoise?.enabled
+					? Math.max(0, Math.min(100, webcamDenoise.level ?? 75)) / 100
+					: 0;
+
+				if (isDenoiseTrack && denoiseRatio > 0) {
+					try {
+						const highPass = ctx.createBiquadFilter();
+						highPass.type = "highpass";
+						highPass.Q.value = 0.707;
+						highPass.frequency.value = 85 + denoiseRatio * 95;
+
+						const humNotch = ctx.createBiquadFilter();
+						humNotch.type = "peaking";
+						humNotch.frequency.value = 160;
+						humNotch.Q.value = 1.4;
+						humNotch.gain.value = -5;
+
+						const lowPass = ctx.createBiquadFilter();
+						lowPass.type = "lowpass";
+						lowPass.Q.value = 0.707;
+						lowPass.frequency.value = 13000 - denoiseRatio * 5000;
+
+						const dryGain = ctx.createGain();
+						dryGain.gain.value = Math.max(0, 1 - denoiseRatio);
+
+						const wetGain = ctx.createGain();
+						wetGain.gain.value = denoiseRatio;
+
+						source.connect(dryGain);
+						dryGain.connect(gainNode);
+
+						source.connect(highPass);
+						highPass.connect(humNotch);
+						humNotch.connect(lowPass);
+						lowPass.connect(wetGain);
+						wetGain.connect(gainNode);
+					} catch {
+						source.connect(gainNode);
+					}
+				} else {
+					source.connect(gainNode);
+				}
+
 				gainNode.connect(ctx.destination);
 
 				source.start(localStartSec);
