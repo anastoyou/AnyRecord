@@ -1,10 +1,16 @@
+import path from "node:path";
 import { expect, it, vi } from "vitest";
 import { trashLibraryProjects } from "./trashProjects";
+
+const pA = path.resolve("/private/tmp/a.recordly");
+const pB = path.resolve("/private/tmp/b.recordly");
+const pTxt = path.resolve("/private/tmp/private.txt");
+
 it("rejects paths outside the project library before touching files", async () => {
 	const trash = vi.fn();
 	await expect(
-		trashLibraryProjects(["/private/tmp/a.recordly", "/private/tmp/private.txt"], {
-			list: async () => ({ entries: [{ path: "/private/tmp/a.recordly" }] }),
+		trashLibraryProjects([pA, pTxt], {
+			list: async () => ({ entries: [{ path: pA }] }),
 			trash,
 			thumbnailPath: (p) => p + ".png",
 		}),
@@ -16,19 +22,19 @@ it("trashes only selected project files, deduplicates paths, and reports partial
 		if (p.endsWith("b.recordly")) throw Error("locked");
 	});
 	const result = await trashLibraryProjects(
-		["/private/tmp/a.recordly", "/private/tmp/a.recordly", "/private/tmp/b.recordly"],
+		[pA, pA, pB],
 		{
 			list: async () => ({
-				entries: [{ path: "/private/tmp/a.recordly" }, { path: "/private/tmp/b.recordly" }],
+				entries: [{ path: pA }, { path: pB }],
 			}),
 			trash,
 			thumbnailPath: (p) => p + ".missing.png",
 		},
 	);
-	expect(result.deleted).toEqual(["/private/tmp/a.recordly"]);
+	expect(result.deleted).toEqual([pA]);
 	expect(result.errors).toEqual(["Could not trash b.recordly"]);
 	expect(trash.mock.calls.map(([p]) => p)).toEqual([
-		"/private/tmp/a.recordly",
-		"/private/tmp/b.recordly",
+		pA,
+		pB,
 	]);
 });

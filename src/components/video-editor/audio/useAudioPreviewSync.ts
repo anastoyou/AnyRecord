@@ -382,6 +382,7 @@ export function useAudioPreviewSync({
 			return;
 		}
 		let cancelled = false;
+		const seekedCleanups: Array<() => void> = [];
 		// A newly resolved source must pass the same playback checks as timeline updates.
 		void sourceLoadVersion;
 
@@ -460,9 +461,27 @@ export function useAudioPreviewSync({
 
 			const atEnd = audioDuration !== null && targetTime >= audioDuration;
 			if (isPlaying && !isCurrentClipMuted && !beforeAudioStart && !atEnd) {
-				void ensureSourceAudioRunning().then(() => {
-					if (!cancelled) audio.play().catch(() => undefined);
-				});
+				if (audio.seeking) {
+					if (!audio.paused) {
+						audio.pause();
+					}
+					const handleSeeked = () => {
+						audio.removeEventListener("seeked", handleSeeked);
+						if (!cancelled && audio.paused) {
+							void ensureSourceAudioRunning().then(() => {
+								if (!cancelled) audio.play().catch(() => undefined);
+							});
+						}
+					};
+					audio.addEventListener("seeked", handleSeeked);
+					seekedCleanups.push(() => {
+						audio.removeEventListener("seeked", handleSeeked);
+					});
+				} else if (audio.paused) {
+					void ensureSourceAudioRunning().then(() => {
+						if (!cancelled) audio.play().catch(() => undefined);
+					});
+				}
 			} else if (!audio.paused) {
 				audio.pause();
 			}
@@ -471,6 +490,9 @@ export function useAudioPreviewSync({
 		lastSourceAudioSyncTimeRef.current = currentTime;
 		return () => {
 			cancelled = true;
+			for (const cleanup of seekedCleanups) {
+				cleanup();
+			}
 		};
 	}, [
 		sourceLoadVersion,

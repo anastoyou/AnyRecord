@@ -612,7 +612,7 @@ export class ModernVideoExporter {
 					timelineEffects: this.config.clipRegions !== undefined,
 					width: this.config.width,
 					height: this.config.height,
-					preferredRenderBackend: undefined,
+					preferredRenderBackend: this.config.preferredRenderBackend ?? "webgl",
 					wallpaper: this.config.wallpaper,
 					zoomRegions: this.config.zoomRegions,
 					showShadow: this.config.showShadow,
@@ -2805,21 +2805,35 @@ export class ModernVideoExporter {
 			return false;
 		}
 
-		const encoderConfig: VideoEncoderConfig = {
+		const buildEncoderConfig = (
+			hardwareAcceleration: VideoEncoderConfig["hardwareAcceleration"],
+		): VideoEncoderConfig => ({
 			codec: "avc1.640034",
 			width: this.config.width,
 			height: this.config.height,
 			bitrate: this.config.bitrate,
 			framerate: this.config.frameRate,
-			hardwareAcceleration: "prefer-hardware",
+			hardwareAcceleration,
 			avc: { format: "annexb" },
-		};
+		});
+
+		let encoderConfig = buildEncoderConfig("prefer-hardware");
 
 		try {
 			const support = await VideoEncoder.isConfigSupported(encoderConfig);
 			if (!support.supported) {
-				this.lastNativeExportError = `H.264 Annex B encoding is not supported at ${this.config.width}x${this.config.height}.`;
-				return false;
+				const softwareConfig = buildEncoderConfig("prefer-software");
+				const softwareSupport = await VideoEncoder.isConfigSupported(softwareConfig);
+
+				if (!softwareSupport.supported) {
+					this.lastNativeExportError = `H.264 Annex B encoding is not supported at ${this.config.width}x${this.config.height}.`;
+					return false;
+				}
+
+				encoderConfig = softwareConfig;
+				console.warn(
+					`[VideoExporter] Native hardware H.264 encoding is unavailable at ${this.config.width}x${this.config.height}; using software encoding instead.`,
+				);
 			}
 		} catch (error) {
 			this.lastNativeExportError = error instanceof Error ? error.message : String(error);
