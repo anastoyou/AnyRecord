@@ -33,11 +33,6 @@ const MAX_IMAGE_BYTES = 100 * 1024 * 1024; // 100 MB
 const MAX_VIDEO_BYTES = 2 * 1024 * 1024 * 1024; // 2 GB
 const CHUNK_RETRY_ATTEMPTS = 3;
 
-const DEFAULT_NEON_DATABASE_URL =
-	"postgresql://neondb_owner:npg_5PrGnuIT4Did@ep-odd-smoke-a13hiwg1-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require";
-const DEFAULT_TOKEN_KEY =
-	"ar_cld_k1_9f4b7e2a8c6d1f0e3b5a7c9d2e4f6a8b0c1d3e5f7a9b2c4d6e8f0a1b3c5d7e9f";
-
 const IMAGE_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"]);
 const VIDEO_EXTENSIONS = new Set([".mp4", ".mov", ".webm", ".mkv"]);
 
@@ -208,9 +203,18 @@ function getCloudinaryBackend() {
 
 	const databaseUrl =
 		getEnvVar("CLOUDINARY_DATABASE_URL") ||
-		getEnvVar("NEON_DATABASE_URL") ||
-		DEFAULT_NEON_DATABASE_URL;
-	const tokenEncryptionKey = getEnvVar("CLOUDINARY_TOKEN_KEY") || DEFAULT_TOKEN_KEY;
+		getEnvVar("NEON_DATABASE_URL");
+	if (!databaseUrl) {
+		throw new Error(
+			"Cloud database is not configured. Set CLOUDINARY_DATABASE_URL or NEON_DATABASE_URL.",
+		);
+	}
+	const tokenEncryptionKey = getEnvVar("CLOUDINARY_TOKEN_KEY");
+	if (!tokenEncryptionKey) {
+		throw new Error(
+			"Cloudinary token encryption key is not configured. Set CLOUDINARY_TOKEN_KEY.",
+		);
+	}
 	const sql = neon(databaseUrl);
 	const queryFn = (text: string, params?: unknown[]) =>
 		sql.query(text, params) as Promise<Array<Record<string, unknown>>>;
@@ -350,7 +354,8 @@ export async function adoptLocalDeviceConnectionIfNeeded(userId: string): Promis
 		const localConn = await backend.store.getConnection(localUserId);
 		if (!localConn || localConn.status === "revoked") return;
 
-		const tokenEncryptionKey = getEnvVar("CLOUDINARY_TOKEN_KEY") || DEFAULT_TOKEN_KEY;
+		const tokenEncryptionKey = getEnvVar("CLOUDINARY_TOKEN_KEY");
+		if (!tokenEncryptionKey) return;
 		const plainAccess = await decryptSecret(
 			localConn.accessTokenEnc,
 			tokenEncryptionKey,
