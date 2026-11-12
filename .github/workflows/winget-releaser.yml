@@ -17,9 +17,11 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - uses: vedantmgoyal9/winget-releaser@v2
+      - name: Publish to WinGet
+        uses: vedantmgoyal9/winget-releaser@v2
+        continue-on-error: true
         with:
-          identifier: Webadderall.Recordly
+          identifier: Anastoyou.AnyRecord
           installers-regex: 'windows\-x64\.exe$'
           version: ${{ steps.tag.outputs.tag }}
           release-tag: ${{ steps.tag.outputs.tag }}
