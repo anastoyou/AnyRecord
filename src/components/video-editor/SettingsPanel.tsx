@@ -3,7 +3,7 @@ import { Card, RadioGroup, Radio, Label, Description } from "@heroui/react";
 import { ColorControl, ColorPalette } from "@/components/ui/color-picker";
 import { Camera, MicrophoneIcon, Palette, Play, Plus, SpeakerHigh, SpeakerX, Trash as Trash2, UploadSimple as Upload } from "@/components/ui/icons";
 import type { SourceAudioTrackMeta, SourceAudioTrackSettings } from "./audio/audioTypes";
-import type { AudioPortion } from "./audio/audioPortion";
+import type { AudioPortion, AudioPortionTrack } from "./audio/audioPortion";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "@/components/ui/toast";
@@ -2842,8 +2842,8 @@ export function SettingsPanel({
 												value={portion.trackId || portion.targetTrack || "all"}
 												onValueChange={(val: string) =>
 													onAudioPortionUpdate?.(portion.id, {
-														trackId: val,
-														targetTrack: val,
+														trackId: val as AudioPortionTrack,
+														targetTrack: val as AudioPortionTrack,
 													})
 												}
 											>
