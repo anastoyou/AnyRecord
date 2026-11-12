@@ -670,6 +670,19 @@ jobs:
             "${assets[@]}" \
             --repo "${{ github.repository }}" \
             --clobber
+
+          # Publish draft release and mark as latest once assets are uploaded
+          if [ "${{ needs.prepare-release.outputs.prerelease }}" = "true" ]; then
+            gh release edit "${{ needs.prepare-release.outputs.tag_name }}" \
+              --repo "${{ github.repository }}" \
+              --draft=false \
+              --prerelease
+          else
+            gh release edit "${{ needs.prepare-release.outputs.tag_name }}" \
+              --repo "${{ github.repository }}" \
+              --draft=false \
+              --latest
+          fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
