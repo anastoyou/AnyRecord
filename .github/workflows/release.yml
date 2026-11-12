@@ -29,6 +29,10 @@ concurrency:
   group: release-${{ github.event.release.tag_name || github.event.inputs.tag_name || github.run_id }}
   cancel-in-progress: false
 
+env:
+  VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+  VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+
 jobs:
   prepare-release:
     name: Prepare release

@@ -10,6 +10,10 @@ permissions:
   attestations: write
   artifact-metadata: write
 
+env:
+  VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+  VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+
 jobs:
   build-windows:
     runs-on: windows-latest
