@@ -29,6 +29,9 @@ export function OnboardingController({
 	}, [requestNonce]);
 	const close = useCallback(() => {
 		saveAppSetting("recordly.onboarding.permissionsRequested", false);
+		saveAppSetting("anyrecord.onboarding.permissionsRequested", false);
+		saveAppSetting(SEEN_KEY, true);
+		saveAppSetting("anyrecord.onboarding.v1.seen", true);
 		setStartWithPermissions(false);
 		setOpen(false);
 	}, []);
@@ -37,10 +40,16 @@ export function OnboardingController({
 		if (!ready) return;
 		if (checked.current) return;
 		checked.current = true;
-		if (loadAppSetting<boolean>("recordly.onboarding.permissionsRequested")) {
+		if (
+			loadAppSetting<boolean>("recordly.onboarding.permissionsRequested") ||
+			loadAppSetting<boolean>("anyrecord.onboarding.permissionsRequested")
+		) {
 			setStartWithPermissions(true);
 			setOpen(true);
-		} else if (!loadAppSetting<boolean>(SEEN_KEY)) {
+		} else if (
+			!loadAppSetting<boolean>(SEEN_KEY) &&
+			!loadAppSetting<boolean>("anyrecord.onboarding.v1.seen")
+		) {
 			setOpen(true);
 		}
 	}, [ready]);
@@ -56,6 +65,7 @@ export function OnboardingController({
 
 	const finish = () => {
 		saveAppSetting(SEEN_KEY, true);
+		saveAppSetting("anyrecord.onboarding.v1.seen", true);
 		close();
 		void window.electronAPI.showRecordingHud();
 	};

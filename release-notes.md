@@ -1,3 +1,9 @@
+## What's Changed in AnyRecord v1.4.4
+
+### 🎬 Guest & Local Recording Fix
+- **Unrestricted Local Recording**: Resolved permission popup loop when clicking Start Recording. Users can now record without being forced to sign into a cloud account.
+- **Persistent Onboarding Dismissal**: Fixed "Continue as Guest" and onboarding completion so the setup walkthrough never reappears on subsequent recording attempts.
+
 ## What's Changed in AnyRecord v1.4.3
 
 ### ☁️ Cloudinary & Neon Cloud Storage Integration

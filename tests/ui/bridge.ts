@@ -165,7 +165,7 @@ export async function installDesktopBridge(
 					return { success: true };
 				},
 				getCurrentUpdateToastPayload: async () => ({
-					version: "1.4.3",
+					version: "1.4.4",
 					detail: "A new version of AnyRecord is available.",
 					phase: "available",
 					delayMs: 60000,

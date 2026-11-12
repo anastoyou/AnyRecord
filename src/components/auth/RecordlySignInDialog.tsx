@@ -16,6 +16,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { type FormEvent, Fragment, useEffect, useRef, useState } from "react";
 import { SignOut } from "@/components/ui/icons";
 import { useI18n } from "@/contexts/I18nContext";
+import { saveAppSetting } from "@/lib/appSettings";
 import {
 	getEnabledSignInProviders,
 	type RecordlyOAuthProvider,
@@ -438,7 +439,11 @@ export function RecordlySignInDialog({
 							<Button
 								variant="ghost"
 								isDisabled={disabled}
-								onPress={() => setShowPermissions(true)}
+								onPress={() => {
+									saveAppSetting("recordly.onboarding.v1.seen", true);
+									saveAppSetting("anyrecord.onboarding.v1.seen", true);
+									setShowPermissions(true);
+								}}
 								className="text-xs text-muted-foreground hover:text-foreground"
 							>
 								Continue as Guest

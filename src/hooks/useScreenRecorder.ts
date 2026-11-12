@@ -9,6 +9,7 @@ import {
 } from "@/lib/audio/noiseSuppressionEngine";
 import { getEffectiveRecordingDurationMs } from "@/lib/mediaTiming";
 import { hasRecordlySession } from "@/lib/auth/recordlyAuth";
+import { loadAppSetting } from "@/lib/appSettings";
 import {
 	getVideoExtensionForMimeType,
 	isWebmMimeType,
@@ -574,7 +575,11 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	}, []);
 
 	const preparePermissions = useCallback(async () => {
-		if (!(await hasRecordlySession().catch(() => false))) {
+		const onboardingSeen =
+			loadAppSetting<boolean>("recordly.onboarding.v1.seen") ||
+			loadAppSetting<boolean>("anyrecord.onboarding.v1.seen");
+		const hasSession = await hasRecordlySession().catch(() => false);
+		if (!hasSession && !onboardingSeen) {
 			await window.electronAPI.showRecordingPermissions();
 			return false;
 		}
