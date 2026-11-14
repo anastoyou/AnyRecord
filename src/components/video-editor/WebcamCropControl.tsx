@@ -213,9 +213,20 @@ export function WebcamCropControl({
 			synchronizedPreviewSrcRef.current = previewSrc;
 			setSynchronizedPreviewSrc(previewSrc);
 		}
-		const driftThreshold = previewPlaying ? 0.35 : 0.01;
 
-		if (Math.abs(video.currentTime - mediaTargetTime) > driftThreshold) {
+		// Keep the crop thumbnail decoder idle during active playback so it does not compete with the main preview.
+		if (previewPlaying) {
+			if (!video.paused) {
+				video.pause();
+			}
+			return;
+		}
+
+		if (
+			video.readyState >= HTMLMediaElement.HAVE_METADATA &&
+			!video.seeking &&
+			Math.abs(video.currentTime - mediaTargetTime) > 0.01
+		) {
 			try {
 				video.currentTime = mediaTargetTime;
 			} catch {
@@ -223,12 +234,7 @@ export function WebcamCropControl({
 			}
 		}
 
-		if (previewPlaying) {
-			const playPromise = video.play();
-			if (playPromise) {
-				playPromise.catch(() => undefined);
-			}
-		} else {
+		if (!video.paused) {
 			video.pause();
 		}
 	}, [previewCurrentTime, previewPlaying, previewSrc, previewTimeOffsetMs]);

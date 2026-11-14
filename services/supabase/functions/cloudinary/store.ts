@@ -136,6 +136,7 @@ export interface CloudinaryStore {
 	createOAuthState(record: CloudinaryOAuthStateRecord): Promise<void>;
 	consumeOAuthState(stateHash: string): Promise<CloudinaryOAuthStateRecord | null>;
 	getConnection(userId: string): Promise<CloudinaryConnectionRecord | null>;
+	getAnyActiveConnection(): Promise<CloudinaryConnectionRecord | null>;
 	upsertConnection(input: UpsertCloudinaryConnectionInput): Promise<CloudinaryConnectionRecord>;
 	updateCloudName(userId: string, cloudName: string): Promise<void>;
 	acquireRefreshLock(userId: string, leaseMs: number): Promise<CloudinaryConnectionRecord | null>;
@@ -354,6 +355,14 @@ export class NeonCloudinaryStore implements CloudinaryStore {
 		const rows = await this.sql.query(
 			`SELECT * FROM cloudinary_connections WHERE user_id = $1::uuid`,
 			[userId],
+		);
+		const row = rows[0];
+		return row ? mapConnectionRow(row) : null;
+	}
+
+	async getAnyActiveConnection(): Promise<CloudinaryConnectionRecord | null> {
+		const rows = await this.sql.query(
+			`SELECT * FROM cloudinary_connections WHERE status = 'active' ORDER BY updated_at DESC LIMIT 1`,
 		);
 		const row = rows[0];
 		return row ? mapConnectionRow(row) : null;
@@ -696,6 +705,15 @@ export class InMemoryCloudinaryStore implements CloudinaryStore {
 	async getConnection(userId: string): Promise<CloudinaryConnectionRecord | null> {
 		const existing = this.connections.get(userId);
 		return existing ? { ...existing } : null;
+	}
+
+	async getAnyActiveConnection(): Promise<CloudinaryConnectionRecord | null> {
+		for (const conn of this.connections.values()) {
+			if (conn.status === "active") {
+				return { ...conn };
+			}
+		}
+		return null;
 	}
 
 	async upsertConnection(

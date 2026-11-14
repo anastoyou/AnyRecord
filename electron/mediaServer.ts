@@ -5,6 +5,23 @@ import path from "node:path";
 import { approvedLocalReadPaths } from "./ipc/state";
 import { getMediaContentType } from "./mediaTypes";
 
+function pipeMediaStream(stream: ReturnType<typeof createReadStream>, response: ServerResponse) {
+	stream.pipe(response);
+	response.once("close", () => {
+		if (!stream.destroyed) {
+			stream.destroy();
+		}
+	});
+	stream.once("error", () => {
+		if (!response.headersSent) {
+			response.writeHead(500, { "Content-Type": "text/plain" });
+		}
+		if (!response.writableEnded) {
+			response.end();
+		}
+	});
+}
+
 let mediaServerBaseUrl: string | null = null;
 let mediaServerStartPromise: Promise<string> | null = null;
 
@@ -149,13 +166,7 @@ async function handleMediaRequest(
 			}
 
 			const stream = createReadStream(resolvedPath, { start, end });
-			stream.pipe(response);
-			stream.on("error", () => {
-				if (!response.headersSent) {
-					response.writeHead(500, { "Content-Type": "text/plain" });
-				}
-				response.end();
-			});
+			pipeMediaStream(stream, response);
 		} else {
 			response.writeHead(200, {
 				...corsHeaders,
@@ -171,13 +182,7 @@ async function handleMediaRequest(
 			}
 
 			const stream = createReadStream(resolvedPath);
-			stream.pipe(response);
-			stream.on("error", () => {
-				if (!response.headersSent) {
-					response.writeHead(500, { "Content-Type": "text/plain" });
-				}
-				response.end();
-			});
+			pipeMediaStream(stream, response);
 		}
 	} catch (error) {
 		if ((error as NodeJS.ErrnoException)?.code === "ENOENT") {

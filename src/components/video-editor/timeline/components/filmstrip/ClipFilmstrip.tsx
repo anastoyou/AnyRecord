@@ -36,34 +36,47 @@ export function ClipFilmstrip({
 	const end = Math.min(span.end, range.end);
 	const [windowRange, setWindowRange] = useState({ start, end, count });
 	useEffect(() => {
-		const timer = setTimeout(() => setWindowRange({ start, end, count }), 150);
+		const timer = setTimeout(
+			() =>
+				setWindowRange((prev) =>
+					prev.start === start && prev.end === end && prev.count === count
+						? prev
+						: { start, end, count },
+				),
+			150,
+		);
 		return () => clearTimeout(timer);
 	}, [start, end, count]);
-	// biome-ignore lint/correctness/useExhaustiveDependencies: clear stale thumbnails when their source or clip bounds change.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: clear stale thumbnails when the source asset changes.
 	useEffect(() => {
 		setFrames([]);
-	}, [path, span.start, span.end, sourceSpan.start, sourceSpan.end]);
+	}, [path]);
 	useEffect(() => {
 		const controller = new AbortController();
-		const times = filmstripSampleTimes(
-			{ start: span.start, end: span.end },
-			{ start: sourceSpan.start, end: sourceSpan.end },
-			windowRange,
-			windowRange.count,
-		);
-		setLoading(times.length > 0);
-		if (times.length) {
-			void extractFilmstrip(path, times, controller.signal)
-				.then((images) => {
-					if (!controller.signal.aborted) setFrames(images);
-				})
-				.catch(() => {
-					/* Keep the clip's color when a source cannot be decoded. */
-				})
-				.finally(() => {
-					if (!controller.signal.aborted) setLoading(false);
-				});
+		const times =
+			windowRange.count > 0
+				? filmstripSampleTimes(
+						{ start: span.start, end: span.end },
+						{ start: sourceSpan.start, end: sourceSpan.end },
+						windowRange,
+						windowRange.count,
+					)
+				: [];
+		if (times.length === 0) {
+			setLoading(false);
+			return () => controller.abort();
 		}
+		setLoading(true);
+		void extractFilmstrip(path, times, controller.signal)
+			.then((images) => {
+				if (!controller.signal.aborted) setFrames(images);
+			})
+			.catch(() => {
+				/* Keep the clip's color when a source cannot be decoded. */
+			})
+			.finally(() => {
+				if (!controller.signal.aborted) setLoading(false);
+			});
 		return () => controller.abort();
 	}, [path, span.start, span.end, sourceSpan.start, sourceSpan.end, windowRange]);
 	return (

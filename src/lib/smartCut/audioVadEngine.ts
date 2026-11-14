@@ -1,5 +1,5 @@
 import type { CaptionCue } from "@/components/video-editor/types";
-import { resolveMediaResourceUrl } from "@/lib/exporter/localMediaSource";
+import { getLocalFilePath, resolveMediaResourceUrl } from "@/lib/exporter/localMediaSource";
 import { SMART_CUT_BIN_MS } from "./smartCutTypes";
 
 const MIN_RMS_AMPLITUDE = 1e-5; // -100 dBFS floor
@@ -135,7 +135,23 @@ export async function extractAudioVadSeries(params: {
 	const combinedRmsDb = new Float32Array(binCount).fill(-100);
 	const combinedZcr = new Float32Array(binCount);
 
-	const uniqueSources = [...new Set(sources.filter(Boolean))];
+	const expandedSources = [...sources.filter(Boolean)];
+	if (typeof window !== "undefined" && window.electronAPI?.getVideoAudioFallbackPaths) {
+		for (const src of [...expandedSources]) {
+			const localPath = getLocalFilePath(src);
+			if (!localPath) continue;
+			try {
+				const fallback = await window.electronAPI.getVideoAudioFallbackPaths(localPath);
+				if (fallback?.success && Array.isArray(fallback.paths)) {
+					expandedSources.push(...fallback.paths);
+				}
+			} catch {
+				// ignore companion audio lookup failure
+			}
+		}
+	}
+
+	const uniqueSources = [...new Set(expandedSources.filter(Boolean))];
 	if (uniqueSources.length === 0 || typeof window === "undefined") {
 		return { rmsDb: combinedRmsDb, zcr: combinedZcr, noiseFloorDb: -70, hasSignal: false };
 	}
@@ -148,7 +164,6 @@ export async function extractAudioVadSeries(params: {
 	}
 
 	let hasAnySignal = false;
-	let minNoiseFloorDb = -30;
 	const audioContext = new AudioContextCtor();
 
 	try {
@@ -171,7 +186,6 @@ export async function extractAudioVadSeries(params: {
 				const result = analyzeAudioChannelBins(channels, decoded.sampleRate, binCount, binMs);
 				if (result.hasSignal) {
 					hasAnySignal = true;
-					minNoiseFloorDb = Math.min(minNoiseFloorDb, result.noiseFloorDb);
 					for (let i = 0; i < binCount; i++) {
 						if (result.rmsDb[i] > combinedRmsDb[i]) {
 							combinedRmsDb[i] = result.rmsDb[i];
@@ -187,10 +201,28 @@ export async function extractAudioVadSeries(params: {
 		void audioContext.close().catch(() => undefined);
 	}
 
+	let combinedNoiseFloorDb = -70;
+	if (hasAnySignal) {
+		const nonSilentCombined: number[] = [];
+		for (let i = 0; i < binCount; i++) {
+			if (combinedRmsDb[i] > -85) {
+				nonSilentCombined.push(combinedRmsDb[i]);
+			}
+		}
+		if (nonSilentCombined.length > 0) {
+			nonSilentCombined.sort((a, b) => a - b);
+			const p10Index = Math.floor(nonSilentCombined.length * 0.1);
+			combinedNoiseFloorDb = Math.max(
+				-75,
+				Math.min(-30, nonSilentCombined[p10Index] ?? -60),
+			);
+		}
+	}
+
 	return {
 		rmsDb: combinedRmsDb,
 		zcr: combinedZcr,
-		noiseFloorDb: hasAnySignal ? minNoiseFloorDb : -70,
+		noiseFloorDb: combinedNoiseFloorDb,
 		hasSignal: hasAnySignal,
 	};
 }

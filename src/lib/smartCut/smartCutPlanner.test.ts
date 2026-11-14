@@ -53,7 +53,7 @@ function fillBinRange(
 }
 
 describe("Smart Cut Multi-Signal Detection & Planning Engine", () => {
-	it("cuts inactive gaps >= 5s while applying 0.5s pre-cut and 0.7s post-cut padding", () => {
+	it("cuts exact inactive gaps >= minInactivitySec without extra padding", () => {
 		// 20s recording:
 		// 0s - 5s: speaking (-20 dB)
 		// 5s - 13s: 8s complete inactivity
@@ -69,13 +69,12 @@ describe("Smart Cut Multi-Signal Detection & Planning Engine", () => {
 
 		expect(result.cuts).toHaveLength(1);
 		const cut = result.cuts[0];
-		// Raw inactive: 5000ms -> 13000ms
-		// With prePad 500ms and postPad 700ms: 5500ms -> 12300ms (6800ms cut)
-		expect(cut.sourceStartMs).toBe(5_500);
-		expect(cut.sourceEndMs).toBe(12_300);
-		expect(cut.durationMs).toBe(6_800);
-		expect(result.totalSavedMs).toBe(6_800);
-		expect(result.estimatedDurationMs).toBe(13_200);
+		// Raw inactive: 5000ms -> 13000ms (8000ms cut)
+		expect(cut.sourceStartMs).toBe(5_000);
+		expect(cut.sourceEndMs).toBe(13_000);
+		expect(cut.durationMs).toBe(8_000);
+		expect(result.totalSavedMs).toBe(8_000);
+		expect(result.estimatedDurationMs).toBe(12_000);
 	});
 
 	it("enforces speech immunity: never cuts a section with speech even if mouse, keyboard, and screen are completely still", () => {
@@ -131,10 +130,10 @@ describe("Smart Cut Multi-Signal Detection & Planning Engine", () => {
 			raw,
 			options: DEFAULT_SMART_CUT_OPTIONS,
 		});
-		// Should merge into a single continuous cut (2500ms -> 17300ms)
+		// Should merge into a single continuous cut (2000ms -> 18000ms)
 		expect(bridgedResult.cuts).toHaveLength(1);
-		expect(bridgedResult.cuts[0].sourceStartMs).toBe(2_500);
-		expect(bridgedResult.cuts[0].sourceEndMs).toBe(17_300);
+		expect(bridgedResult.cuts[0].sourceStartMs).toBe(2_000);
+		expect(bridgedResult.cuts[0].sourceEndMs).toBe(18_000);
 
 		// Now replace that 200ms bump with spoken word (caption cue)
 		const rawWithSpeech = createBlankRawSeries(20_000);
@@ -272,9 +271,126 @@ describe("Smart Cut Multi-Signal Detection & Planning Engine", () => {
 		expect(vad.rmsDb[6]).toBeGreaterThan(-10);
 
 		const blackFrame = new Uint8ClampedArray(16 * 9 * 4).fill(0);
+		const noisyBlackFrame = new Uint8ClampedArray(16 * 9 * 4).fill(3);
 		const whiteFrame = new Uint8ClampedArray(16 * 9 * 4).fill(255);
 		expect(computeFrameLuminanceMapd(blackFrame, blackFrame, 16, 9)).toBe(0);
+		expect(computeFrameLuminanceMapd(blackFrame, noisyBlackFrame, 16, 9)).toBe(0);
 		expect(computeFrameLuminanceMapd(blackFrame, whiteFrame, 16, 9)).toBeCloseTo(1, 2);
+	});
+
+	it("does not block cuts when a stationary cursor rests over text or when webcam has idle motion", () => {
+		const raw = createBlankRawSeries(15_000);
+		fillBinRange(raw.audioRmsDb, 0, 3_000, -18);
+		fillBinRange(raw.audioRmsDb, 12_000, 15_000, -18);
+
+		// Stationary mouse resting over an editor (cursorType: "text") from 3s to 12s
+		const stationarySamples = [];
+		for (let t = 3_000; t < 12_000; t += 50) {
+			stationarySamples.push({
+				timeMs: t,
+				cx: 0.4,
+				cy: 0.5,
+				interactionType: "move" as const,
+				cursorType: "text" as const,
+			});
+		}
+		const telemetry = analyzeTelemetryActivityBins(stationarySamples, raw.binCount);
+		raw.mouseDisplacement = telemetry.mouseDisplacement;
+		raw.mouseClickActive = telemetry.mouseClickActive;
+		raw.textCursorActive = telemetry.textCursorActive;
+
+		// Idle webcam movement during the silent pause
+		fillBinRange(raw.webcamMapd, 3_000, 12_000, 0.025);
+
+		const result = planSmartCuts({
+			raw,
+			options: DEFAULT_SMART_CUT_OPTIONS,
+		});
+
+		expect(result.cuts).toHaveLength(1);
+		expect(result.cuts[0].sourceStartMs).toBe(3_000);
+		expect(result.cuts[0].sourceEndMs).toBe(12_000);
+	});
+
+	it("trims intro and outro dead air cleanly to recording boundaries without leaving edge stubs", () => {
+		const raw = createBlankRawSeries(16_000);
+		// Intro silence: 0s - 4s, active speech: 4s - 12s, outro silence: 12s - 16s
+		fillBinRange(raw.audioRmsDb, 4_000, 12_000, -18);
+
+		const result = planSmartCuts({
+			raw,
+			options: DEFAULT_SMART_CUT_OPTIONS,
+		});
+
+		expect(result.cuts).toHaveLength(2);
+		expect(result.cuts[0].sourceStartMs).toBe(0);
+		expect(result.cuts[0].sourceEndMs).toBe(4_000);
+		expect(result.cuts[1].sourceStartMs).toBe(12_000);
+		expect(result.cuts[1].sourceEndMs).toBe(16_000);
+	});
+
+	it("extracts per-signal removable cuts in cutsByCategory for timing, audio, input, screen, and webcam tabs", () => {
+		const raw = createBlankRawSeries(20_000);
+		// Audio active 0..5s, silent 5..20s -> audio removable cut 5s..20s
+		fillBinRange(raw.audioRmsDb, 0, 5_000, -18);
+		// Mouse active 13..20s, idle 0..13s -> input removable cut 0s..13s
+		fillBinRange(raw.mouseDisplacement, 13_000, 20_000, 0.02);
+		// Screen active 0..4s and 14..20s, static 4..14s
+		fillBinRange(raw.screenMapd, 0, 4_000, 0.03);
+		fillBinRange(raw.screenMapd, 14_000, 20_000, 0.03);
+		// Webcam active 0..6s, idle 6..20s -> webcam removable cut 6s..20s
+		fillBinRange(raw.webcamMapd, 0, 6_000, 0.04);
+
+		const result = planSmartCuts({
+			raw,
+			options: DEFAULT_SMART_CUT_OPTIONS,
+		});
+
+		// Inactive (full dead air): strictly where mic and input are all inactive (5s..13s)
+		expect(result.cutsByCategory.inactive).toHaveLength(1);
+		expect(result.cutsByCategory.inactive[0]).toMatchObject({
+			category: "inactive",
+			timelineStartMs: 5_000,
+			timelineEndMs: 13_000,
+		});
+
+		// Combined (timing): inactive where all primary signals are idle (5s..13s)
+		expect(result.cutsByCategory.timing).toHaveLength(1);
+		expect(result.cutsByCategory.timing[0]).toMatchObject({
+			category: "timing",
+			timelineStartMs: 5_000,
+			timelineEndMs: 13_000,
+		});
+
+		// Audio removable cuts: silent 5s..20s
+		expect(result.cutsByCategory.audio).toHaveLength(1);
+		expect(result.cutsByCategory.audio[0]).toMatchObject({
+			category: "audio",
+			timelineStartMs: 5_000,
+			timelineEndMs: 20_000,
+			durationMs: 15_000,
+		});
+
+		// Input removable cuts: idle 0s..13s
+		expect(result.cutsByCategory.input).toHaveLength(1);
+		expect(result.cutsByCategory.input[0]).toMatchObject({
+			category: "input",
+			timelineStartMs: 0,
+			timelineEndMs: 13_000,
+			durationMs: 13_000,
+		});
+
+		// Screen option is disabled by default
+		expect(result.cutsByCategory.screen).toHaveLength(0);
+
+		// Webcam removable cuts: idle 6s..20s
+		expect(result.cutsByCategory.webcam).toHaveLength(1);
+		expect(result.cutsByCategory.webcam[0]).toMatchObject({
+			category: "webcam",
+			timelineStartMs: 6_000,
+			timelineEndMs: 20_000,
+			durationMs: 14_000,
+		});
 	});
 });
 

@@ -4,6 +4,31 @@ export const SMART_CUT_BIN_MS = 100;
 
 export type SmartCutSensitivity = "low" | "medium" | "high";
 export type SmartCutWebcamRole = "supporting" | "ignored";
+export type SmartCutSignalCategory =
+	| "inactive"
+	| "timing"
+	| "audio"
+	| "input"
+	| "screen"
+	| "webcam";
+export type SmartCutSignalKey = Exclude<SmartCutSignalCategory, "inactive" | "timing">;
+
+export interface SmartCutSignalSegment {
+	id: string;
+	signal: SmartCutSignalKey;
+	/** Start time in source recording milliseconds */
+	sourceStartMs: number;
+	/** End time in source recording milliseconds */
+	sourceEndMs: number;
+	/** Start time on current timeline milliseconds */
+	timelineStartMs: number;
+	/** End time on current timeline milliseconds */
+	timelineEndMs: number;
+	/** Timeline duration in milliseconds */
+	durationMs: number;
+	/** Peak signal score in [0, 1] */
+	peakScore: number;
+}
 
 export interface SmartCutOptions {
 	// 1. Timing & Durations
@@ -35,9 +60,9 @@ export interface SmartCutOptions {
 }
 
 export const DEFAULT_SMART_CUT_OPTIONS: SmartCutOptions = {
-	minInactivitySec: 5.0,
-	prePaddingSec: 0.5,
-	postPaddingSec: 0.7,
+	minInactivitySec: 3.0,
+	prePaddingSec: 0,
+	postPaddingSec: 0,
 	minKeepSegmentSec: 1.0,
 	mergeGapSec: 0.5,
 
@@ -51,7 +76,7 @@ export const DEFAULT_SMART_CUT_OPTIONS: SmartCutOptions = {
 	clickProtectionSec: 1.0,
 	keyboardActivityEnabled: true,
 
-	screenActivityEnabled: true,
+	screenActivityEnabled: false,
 	screenSensitivity: "medium",
 
 	webcamActivityEnabled: true,
@@ -79,6 +104,8 @@ export interface RawActivitySeries {
 
 export interface SmartCutCandidate {
 	id: string;
+	/** Signal category that produced this removable cut */
+	category?: SmartCutSignalCategory;
 	/** Start time in source recording milliseconds */
 	sourceStartMs: number;
 	/** End time in source recording milliseconds */
@@ -95,8 +122,11 @@ export interface SmartCutCandidate {
 
 export interface SmartCutAnalysisResult {
 	cuts: SmartCutCandidate[];
+	cutsByCategory: Record<SmartCutSignalCategory, SmartCutCandidate[]>;
 	activityScores: Float32Array;
 	speechMask: Uint8Array;
+	signalScores: Record<SmartCutSignalKey, Float32Array>;
+	signalSegments: Record<SmartCutSignalKey, SmartCutSignalSegment[]>;
 	originalDurationMs: number;
 	estimatedDurationMs: number;
 	totalSavedMs: number;

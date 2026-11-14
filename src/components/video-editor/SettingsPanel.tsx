@@ -5,7 +5,7 @@ import { Camera, MicrophoneIcon, Palette, Play, Plus, SpeakerHigh, SpeakerX, Tra
 import type { SourceAudioTrackMeta, SourceAudioTrackSettings } from "./audio/audioTypes";
 import type { AudioPortion, AudioPortionTrack } from "./audio/audioPortion";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "@/components/ui/toast";
 import minimalCursorUrl from "@/assets/cursors/custom/minimal-cursor.svg";
 import { Button } from "@/components/ui/button";
@@ -457,6 +457,7 @@ interface SettingsPanelProps {
 	onAudioPortionUpdate?: (id: string, patch: Partial<AudioPortion>) => void;
 	onAudioPortionDelete?: (id: string) => void;
 	timelineCurrentTimeMs?: number;
+	getTimelineCurrentTimeMs?: () => number;
 	onSeekToMs?: (ms: number) => void;
 	sourceAudioTrackMeta?: SourceAudioTrackMeta;
 	sourceAudioTrackSettings?: SourceAudioTrackSettings;
@@ -896,7 +897,7 @@ function CursorStylePreview({
 	);
 }
 
-export function SettingsPanel({
+function SettingsPanelImpl({
 	onShowOnboarding,
 	advanced = false,
 	panelMode = "editor",
@@ -930,6 +931,7 @@ export function SettingsPanel({
 	onAudioPortionUpdate,
 	onAudioPortionDelete,
 	timelineCurrentTimeMs,
+	getTimelineCurrentTimeMs,
 	onSeekToMs,
 	sourceAudioTrackMeta = [],
 	sourceAudioTrackSettings = {},
@@ -1873,7 +1875,7 @@ export function SettingsPanel({
 		);
 	}
 
-	const frameSectionContent = (
+	const renderFrameSectionContent = () => (
 		<section className="flex flex-col gap-4">
 			<div className="flex items-center justify-between gap-3">
 				<SectionLabel>{tSettings("sections.frame", "Frame")}</SectionLabel>
@@ -1983,7 +1985,7 @@ export function SettingsPanel({
 		</section>
 	);
 
-	const cropSectionContent = (
+	const renderCropSectionContent = () => (
 		<section className="flex flex-col gap-4">
 			<div className="flex items-center justify-between gap-3">
 				<SectionLabel>{tSettings("sections.crop", "Crop")}</SectionLabel>
@@ -2040,7 +2042,7 @@ export function SettingsPanel({
 		</section>
 	);
 
-	const captionsSectionContent = (
+	const renderCaptionsSectionContent = () => (
 		<CaptionEditorStudio
 			settings={autoCaptionSettings}
 			onUpdateSettings={updateAutoCaptionSettings}
@@ -2067,7 +2069,7 @@ export function SettingsPanel({
 	);
 
 	const effectSectionContent = (() => {
-		const settingsSectionContent = (
+		const renderSettingsSectionContent = () => (
 			<SettingsSections
 				categories={advanced ? ["general", "motion", "advanced"] : ["general", "motion"]}
 			>
@@ -2382,15 +2384,15 @@ export function SettingsPanel({
 			</SettingsSections>
 		);
 
-		const sceneSectionContent = (
+		const renderSceneSectionContent = () => (
 			<div className="space-y-5">
 				{backgroundSettingsContent}
-				{frameSectionContent}
-				{advanced && cropSectionContent}
+				{renderFrameSectionContent()}
+				{advanced && renderCropSectionContent()}
 			</div>
 		);
 
-		const zoomItemSectionContent = (
+		const renderZoomItemSectionContent = () => (
 			<section className="flex flex-col gap-4">
 				{selectedZoomId && (
 					<>
@@ -2499,7 +2501,7 @@ export function SettingsPanel({
 			onAudioNormalizeChange?.(false);
 		};
 
-		const audioSectionContent = (
+		const renderAudioSectionContent = () => (
 			<section className="flex flex-col gap-4">
 				<div className="flex items-center justify-between gap-3">
 					<SectionLabel>{tSettings("audio.volumeTitle", "Audio")}</SectionLabel>
@@ -2864,15 +2866,14 @@ export function SettingsPanel({
 											<div className="flex flex-col gap-1">
 												<div className="flex items-center justify-between text-[11px] text-muted-foreground">
 													<span>Start</span>
-													{timelineCurrentTimeMs != null && (
+													{(getTimelineCurrentTimeMs != null || timelineCurrentTimeMs != null) && (
 														<button
 															type="button"
 															onClick={(e) => {
 																e.stopPropagation();
-																const newStart = Math.min(
-																	timelineCurrentTimeMs,
-																	portion.endMs - 100,
-																);
+																const currentMs =
+																	getTimelineCurrentTimeMs?.() ?? timelineCurrentTimeMs ?? 0;
+																const newStart = Math.min(currentMs, portion.endMs - 100);
 																onAudioPortionUpdate?.(portion.id, {
 																	startMs: Math.max(0, Math.round(newStart)),
 																});
@@ -2905,15 +2906,14 @@ export function SettingsPanel({
 											<div className="flex flex-col gap-1">
 												<div className="flex items-center justify-between text-[11px] text-muted-foreground">
 													<span>End</span>
-													{timelineCurrentTimeMs != null && (
+													{(getTimelineCurrentTimeMs != null || timelineCurrentTimeMs != null) && (
 														<button
 															type="button"
 															onClick={(e) => {
 																e.stopPropagation();
-																const newEnd = Math.max(
-																	timelineCurrentTimeMs,
-																	portion.startMs + 100,
-																);
+																const currentMs =
+																	getTimelineCurrentTimeMs?.() ?? timelineCurrentTimeMs ?? 0;
+																const newEnd = Math.max(currentMs, portion.startMs + 100);
 																onAudioPortionUpdate?.(portion.id, {
 																	endMs: Math.round(newEnd),
 																});
@@ -3019,7 +3019,7 @@ export function SettingsPanel({
 			</section>
 		);
 
-		const clipSectionContent = (
+		const renderClipSectionContent = () => (
 			<section className="flex flex-col gap-3">
 				<SliderControl
 					label={tSettings("speed.label", "Speed")}
@@ -3125,7 +3125,7 @@ export function SettingsPanel({
 			</section>
 		);
 
-		const captionSectionContent = (
+		const renderCaptionSectionContent = () => (
 			<section className="flex flex-col gap-4">
 				{selectedCaptionId !== null ? (
 					<CaptionListPanel
@@ -3154,7 +3154,7 @@ export function SettingsPanel({
 
 		const selectedGesture = gestureRegions.find((r) => r.id === selectedGestureId);
 
-		const gesturesSectionContent = (
+		const renderGesturesSectionContent = () => (
 			<GestureSectionPanel
 				t={t}
 				settings={gestureSettings ?? DEFAULT_GESTURE_TRACKING_SETTINGS}
@@ -3173,41 +3173,42 @@ export function SettingsPanel({
 			/>
 		);
 
-		const gestureItemSectionContent = selectedGesture ? (
-			<GestureItemPanel
-				t={t}
-				region={selectedGesture}
-				onRegionChange={onUpdateGestureRegion ?? (() => { /* no-op */ })}
-				onDeleteRegion={onDeleteGestureRegion ?? (() => { /* no-op */ })}
-				onBack={onBackToGestures}
-			/>
-		) : (
-			gesturesSectionContent
-		);
+		const renderGestureItemSectionContent = () =>
+			selectedGesture ? (
+				<GestureItemPanel
+					t={t}
+					region={selectedGesture}
+					onRegionChange={onUpdateGestureRegion ?? (() => { /* no-op */ })}
+					onDeleteRegion={onDeleteGestureRegion ?? (() => { /* no-op */ })}
+					onBack={onBackToGestures}
+				/>
+			) : (
+				renderGesturesSectionContent()
+			);
 
 		switch (activeEffectSection) {
 			case "settings":
-				return settingsSectionContent;
+				return renderSettingsSectionContent();
 			case "scene":
-				return sceneSectionContent;
+				return renderSceneSectionContent();
 			case "zoom":
-				return zoomItemSectionContent;
+				return renderZoomItemSectionContent();
 			case "clip":
-				return clipSectionContent;
+				return renderClipSectionContent();
 			case "audio":
-				return audioSectionContent;
+				return renderAudioSectionContent();
 			case "frame":
-				return sceneSectionContent;
+				return renderSceneSectionContent();
 			case "crop":
-				return sceneSectionContent;
+				return renderSceneSectionContent();
 			case "gestures":
-				return gesturesSectionContent;
+				return renderGesturesSectionContent();
 			case "gesture":
-				return gestureItemSectionContent;
+				return renderGestureItemSectionContent();
 			case "captions":
-				return captionsSectionContent;
+				return renderCaptionsSectionContent();
 			case "caption":
-				return captionSectionContent;
+				return renderCaptionSectionContent();
 			case "cursor":
 				return (
 					<section className="flex flex-col gap-4">
@@ -3838,7 +3839,7 @@ export function SettingsPanel({
 					</section>
 				);
 			default: {
-				return sceneSectionContent;
+				return renderSceneSectionContent();
 			}
 		}
 	})();
@@ -3931,3 +3932,7 @@ export function SettingsPanel({
 		</Card>
 	);
 }
+
+SettingsPanelImpl.displayName = "SettingsPanel";
+
+export const SettingsPanel = memo(SettingsPanelImpl);

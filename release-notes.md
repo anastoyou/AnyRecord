@@ -1,3 +1,16 @@
+## What's Changed in AnyRecord v1.4.6
+
+### ⚡ Playback, Studio Lighting & Timeline Performance
+- **2-Pass WebGL2 Studio Lighting Preview**: Refactored `StudioLightingEngine` into a 2-pass WebGL2 shader pipeline with direct preview canvas rendering and bubble-scaled resolution while preserving full quality during export.
+- **Smooth Webcam & Multi-Clip Sync**: Eliminated redundant webcam rate fluttering, gated audio filter initialization cleanly, stopped duplicate crop-preview decoding during playback, and ensured idle media streams close cleanly on disconnect.
+- **Responsive Timeline & Settings UI**: Pooled filmstrip `<video>` decoding with 50ms quantized LRU frame caching, memoized timeline items and preview props, lazily rendered settings sections, and eliminated 60fps `SettingsPanel` and annotation transform re-renders.
+
+### ✂️ Smart Cut Refinements
+- **Focused Smart Cut Controls**: Added per-section Apply actions in a larger preview modal that stays open after applying, removed screen-activity gating and pre/post padding for exact cut boundaries, and expanded audio/input/webcam signal scoring.
+
+### ☁️ Cloudinary & Cloud Session Adoption
+- **Cross-Session Connection Adoption**: Added active-connection fallback (`getAnyActiveConnection`) when signing in with Google so existing Cloudinary credentials, media, and cloud projects migrate cleanly to the signed-in account.
+
 ## What's Changed in AnyRecord v1.4.5
 
 ### ☁️ Google Sign-In & Neon DB Cloud Session Fix

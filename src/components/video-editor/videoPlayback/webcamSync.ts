@@ -65,11 +65,17 @@ export function shouldSeekWebcamMedia({
 		return false;
 	}
 
+	const drift = Math.abs(webcamCurrentTime - desiredTime);
+	const alignedTolerance = isPlaying ? 0.08 : 0.01;
+	if (drift <= alignedTolerance) {
+		return false;
+	}
+
 	const timelineJumped =
 		previousTimelineTime === null || Math.abs(timelineTime - previousTimelineTime) > 0.25;
-	const driftThreshold = isPlaying ? 0.35 : 0.01;
+	const driftThreshold = isPlaying ? 0.65 : 0.01;
 
-	return timelineJumped || Math.abs(webcamCurrentTime - desiredTime) > driftThreshold;
+	return timelineJumped || drift > driftThreshold;
 }
 
 /** Missing ranges means an original recording; an empty list means no webcam frames. */

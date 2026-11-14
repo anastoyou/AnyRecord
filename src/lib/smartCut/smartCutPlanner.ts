@@ -16,6 +16,9 @@ import {
 	type SmartCutOptions,
 	type SmartCutSensitivity,
 	type SmartCutSequencePlan,
+	type SmartCutSignalCategory,
+	type SmartCutSignalKey,
+	type SmartCutSignalSegment,
 } from "./smartCutTypes";
 import { analyzeTelemetryActivityBins } from "./telemetryActivityEngine";
 
@@ -74,16 +77,9 @@ export async function extractRawActivitySeries(
 		signal: input.signal,
 	});
 
-	const screenPromise = extractVideoMotionSeries({
-		videoPath: input.videoPath,
-		durationMs,
-		binCount,
-		binMs,
-		centerWeighted: false,
-		signal: input.signal,
-		onProgress: (p) => {
-			input.onProgress?.(0.25 + p * 0.55, "Scanning screen visual activity…");
-		},
+	const screenPromise = Promise.resolve({
+		mapd: new Float32Array(binCount),
+		hasSamples: false,
 	});
 
 	const webcamPromise = input.webcamPath
@@ -134,129 +130,34 @@ function hasSpeechInBinRange(speechMask: Uint8Array, startBin: number, endBin: n
 	return false;
 }
 
-/**
- * Synchronous, deterministic multi-signal fusion & cut planner.
- * Runs in <1ms so UI sliders update detected cuts in real time.
- */
-export function planSmartCuts(params: {
-	raw: RawActivitySeries;
+function extractRemovableCutsFromScores(params: {
+	category: SmartCutSignalCategory;
+	scores: Float32Array;
+	protectMask: Uint8Array;
 	options: SmartCutOptions;
-	clipRegions?: ClipRegion[];
-}): SmartCutAnalysisResult {
-	const { raw, options, clipRegions = [] } = params;
-	const { binCount, binMs, durationMs } = raw;
+	binMs: number;
+	durationMs: number;
+	effectiveClips: ClipRegion[];
+	idPrefix: string;
+}): SmartCutCandidate[] {
+	const {
+		category,
+		scores,
+		protectMask,
+		options,
+		binMs,
+		durationMs,
+		effectiveClips,
+		idPrefix,
+	} = params;
+	const binCount = scores.length;
+	if (binCount === 0 || durationMs <= 0) return [];
 
-	const activityScores = new Float32Array(binCount);
-	const speechMask = new Uint8Array(binCount);
-
-	if (durationMs <= 0 || binCount <= 0) {
-		return {
-			cuts: [],
-			activityScores,
-			speechMask,
-			originalDurationMs: 0,
-			estimatedDurationMs: 0,
-			totalSavedMs: 0,
-		};
-	}
-
-	const mouseDispThreshold = getMouseSensitivityThreshold(options.mouseSensitivity);
-	const screenMapdThreshold = getScreenSensitivityThreshold(options.screenSensitivity);
-	const clickProtectRadiusBins = Math.max(
-		1,
-		Math.round(((options.clickProtectionSec * 1000) / binMs) * 0.5),
-	);
-
-	// Precompute expanded click / text-cursor protection mask
-	const clickProtectedMask = new Uint8Array(binCount);
-	if (options.mouseActivityEnabled) {
-		for (let i = 0; i < binCount; i++) {
-			if (raw.mouseClickActive[i] === 1 || raw.textCursorActive[i] === 1) {
-				const start = Math.max(0, i - clickProtectRadiusBins);
-				const end = Math.min(binCount - 1, i + clickProtectRadiusBins);
-				for (let k = start; k <= end; k++) {
-					clickProtectedMask[k] = 1;
-				}
-			}
-		}
-	}
-
-	// Effective audio silence threshold relative to noise floor
-	const effectiveAudioThresholdDb = Math.min(
-		options.silenceThresholdDb + 6,
-		Math.max(options.silenceThresholdDb, raw.audioNoiseFloorDb + 10),
-	);
-
-	// 1. Score each 100ms bin across all enabled signals
-	for (let k = 0; k < binCount; k++) {
-		let isSpeech = false;
-		if (options.speechProtectionEnabled) {
-			if (options.useAutoCaptions && raw.captionActive[k] === 1) {
-				isSpeech = true;
-			}
-			if (
-				!isSpeech &&
-				options.audioSilenceEnabled &&
-				raw.hasAudioSignal &&
-				raw.audioRmsDb[k] >= effectiveAudioThresholdDb
-			) {
-				isSpeech = true;
-			}
-		} else if (
-			options.audioSilenceEnabled &&
-			raw.hasAudioSignal &&
-			raw.audioRmsDb[k] >= effectiveAudioThresholdDb
-		) {
-			// Even if strict speech immunity is toggled off, audio activity still contributes if audioSilenceEnabled is true
-			isSpeech = true;
-		}
-
-		speechMask[k] = isSpeech && options.speechProtectionEnabled ? 1 : 0;
-
-		if (isSpeech && options.speechProtectionEnabled) {
-			activityScores[k] = 1.0;
-			continue;
-		}
-
-		const audioScore = isSpeech ? 0.9 : 0;
-		const keyScore = options.keyboardActivityEnabled && raw.keyboardActive[k] === 1 ? 0.8 : 0;
-		const clickScore =
-			options.mouseActivityEnabled && clickProtectedMask[k] === 1 ? 0.8 : 0;
-		const mouseMoveScore =
-			options.mouseActivityEnabled && raw.mouseDisplacement[k] >= mouseDispThreshold
-				? 0.6
-				: 0;
-		const screenScore =
-			options.screenActivityEnabled &&
-			raw.hasScreenSamples &&
-			raw.screenMapd[k] >= screenMapdThreshold
-				? 0.5
-				: 0;
-		const webcamScore =
-			options.webcamActivityEnabled &&
-			options.webcamRole === "supporting" &&
-			raw.hasWebcamSamples &&
-			raw.webcamMapd[k] >= 0.012
-				? 0.35
-				: 0;
-
-		activityScores[k] = Math.max(
-			audioScore,
-			keyScore,
-			clickScore,
-			mouseMoveScore,
-			screenScore,
-			webcamScore,
-		);
-	}
-
-	// 2. Build initial inactivity mask (1 = inactive, 0 = active)
 	const inactiveMask = new Uint8Array(binCount);
 	for (let k = 0; k < binCount; k++) {
-		inactiveMask[k] = activityScores[k] < ACTIVE_SCORE_THRESHOLD ? 1 : 0;
+		inactiveMask[k] = scores[k] < ACTIVE_SCORE_THRESHOLD ? 1 : 0;
 	}
 
-	// 3. Bridge tiny non-speech active blips <= mergeGapSec between inactive regions
 	const maxBridgeBins = Math.max(0, Math.round((options.mergeGapSec * 1000) / binMs));
 	if (maxBridgeBins > 0) {
 		let k = 0;
@@ -277,7 +178,7 @@ export function planSmartCuts(params: {
 				if (
 					boundedByInactive &&
 					blipLen <= maxBridgeBins &&
-					!hasSpeechInBinRange(speechMask, blipStart, blipEnd)
+					!hasSpeechInBinRange(protectMask, blipStart, blipEnd)
 				) {
 					for (let b = blipStart; b <= blipEnd; b++) {
 						inactiveMask[b] = 1;
@@ -289,7 +190,6 @@ export function planSmartCuts(params: {
 		}
 	}
 
-	// 4. Extract contiguous inactive spans >= minInactivitySec and apply pre/post padding
 	const minInactivityMs = Math.max(500, Math.round(options.minInactivitySec * 1000));
 	const prePadMs = Math.max(0, Math.round(options.prePaddingSec * 1000));
 	const postPadMs = Math.max(0, Math.round(options.postPaddingSec * 1000));
@@ -313,8 +213,10 @@ export function planSmartCuts(params: {
 			const rawLenMs = rawEndMs - rawStartMs;
 
 			if (rawLenMs >= minInactivityMs) {
-				const cutStartMs = Math.min(durationMs, rawStartMs + prePadMs);
-				const cutEndMs = Math.max(0, rawEndMs - postPadMs);
+				const effectivePrePadMs = rawStartMs <= binMs ? 0 : prePadMs;
+				const effectivePostPadMs = rawEndMs >= durationMs - binMs ? 0 : postPadMs;
+				const cutStartMs = Math.min(durationMs, rawStartMs + effectivePrePadMs);
+				const cutEndMs = Math.max(0, rawEndMs - effectivePostPadMs);
 
 				if (cutEndMs - cutStartMs >= MIN_EFFECTIVE_CUT_MS) {
 					paddedSpans.push({ startMs: cutStartMs, endMs: cutEndMs });
@@ -325,7 +227,6 @@ export function planSmartCuts(params: {
 		}
 	}
 
-	// 5. Enforce minimum keep segment between consecutive cuts (if no speech is in the gap)
 	const minKeepMs = Math.max(0, Math.round(options.minKeepSegmentSec * 1000));
 	const mergedSourceSpans: SourceSpan[] = [];
 	for (const span of paddedSpans) {
@@ -338,7 +239,7 @@ export function planSmartCuts(params: {
 		const gapMs = span.startMs - prev.endMs;
 		const gapStartBin = Math.floor(prev.endMs / binMs);
 		const gapEndBin = Math.ceil(span.startMs / binMs);
-		const gapHasSpeech = hasSpeechInBinRange(speechMask, gapStartBin, gapEndBin);
+		const gapHasSpeech = hasSpeechInBinRange(protectMask, gapStartBin, gapEndBin);
 
 		if (gapMs < minKeepMs && !gapHasSpeech) {
 			prev.endMs = span.endMs;
@@ -347,21 +248,6 @@ export function planSmartCuts(params: {
 		}
 	}
 
-	// 6. Project source cuts onto active timeline ClipRegions
-	const effectiveClips: ClipRegion[] =
-		clipRegions.length > 0
-			? sortClipRegions(clipRegions)
-			: [
-					{
-						id: "clip-1",
-						startMs: 0,
-						endMs: durationMs,
-						sourceStartMs: 0,
-						speed: 1,
-					},
-				];
-
-	const originalDurationMs = getTimelineDurationMs(effectiveClips, durationMs);
 	const cuts: SmartCutCandidate[] = [];
 	let cutIndex = 1;
 
@@ -385,7 +271,8 @@ export function planSmartCuts(params: {
 
 			if (cutDurationMs >= MIN_EFFECTIVE_CUT_MS) {
 				cuts.push({
-					id: `smart-cut-${cutIndex++}`,
+					id: `${idPrefix}-${cutIndex++}`,
+					category,
 					sourceStartMs: overlapSourceStart,
 					sourceEndMs: overlapSourceEnd,
 					timelineStartMs,
@@ -397,6 +284,427 @@ export function planSmartCuts(params: {
 		}
 	}
 
+	return cuts;
+}
+
+function extractSignalSegments(params: {
+	signal: SmartCutSignalKey;
+	scores: Float32Array;
+	binMs: number;
+	durationMs: number;
+	effectiveClips: ClipRegion[];
+}): SmartCutSignalSegment[] {
+	const { signal, scores, binMs, durationMs, effectiveClips } = params;
+	const binCount = scores.length;
+	if (binCount === 0 || durationMs <= 0) return [];
+
+	const activeMask = new Uint8Array(binCount);
+	for (let i = 0; i < binCount; i++) {
+		activeMask[i] = scores[i] >= ACTIVE_SCORE_THRESHOLD ? 1 : 0;
+	}
+
+	// Bridge brief 400ms micro-gaps within the same signal so phrases/bursts stay grouped
+	const maxGapBins = Math.max(1, Math.round(400 / binMs));
+	let k = 0;
+	while (k < binCount) {
+		if (activeMask[k] === 0) {
+			const gapStart = k;
+			while (k < binCount && activeMask[k] === 0) k++;
+			const gapEnd = k - 1;
+			const gapLen = gapEnd - gapStart + 1;
+			if (
+				gapStart > 0 &&
+				gapEnd < binCount - 1 &&
+				activeMask[gapStart - 1] === 1 &&
+				activeMask[gapEnd + 1] === 1 &&
+				gapLen <= maxGapBins
+			) {
+				for (let b = gapStart; b <= gapEnd; b++) {
+					activeMask[b] = 1;
+				}
+			}
+		} else {
+			k++;
+		}
+	}
+
+	const rawSpans: { startMs: number; endMs: number; peakScore: number }[] = [];
+	let idx = 0;
+	while (idx < binCount) {
+		if (activeMask[idx] === 1) {
+			const startBin = idx;
+			let peakScore = 0;
+			while (idx < binCount && activeMask[idx] === 1) {
+				if (scores[idx] > peakScore) peakScore = scores[idx];
+				idx++;
+			}
+			const startMs = startBin * binMs;
+			const endMs = Math.min(durationMs, idx * binMs);
+			if (endMs - startMs >= MIN_EFFECTIVE_CUT_MS) {
+				rawSpans.push({ startMs, endMs, peakScore });
+			}
+		} else {
+			idx++;
+		}
+	}
+
+	const segments: SmartCutSignalSegment[] = [];
+	let segIdx = 1;
+	for (const clip of effectiveClips) {
+		const clipSourceStart = getClipSourceStartMs(clip);
+		const clipSourceEnd = getClipSourceEndMs(clip);
+		const speed = Number.isFinite(clip.speed) && clip.speed > 0 ? clip.speed : 1;
+
+		for (const span of rawSpans) {
+			const overlapSourceStart = Math.max(span.startMs, clipSourceStart);
+			const overlapSourceEnd = Math.min(span.endMs, clipSourceEnd);
+			if (overlapSourceEnd <= overlapSourceStart) continue;
+
+			const timelineStartMs = Math.round(
+				clip.startMs + (overlapSourceStart - clipSourceStart) / speed,
+			);
+			const timelineEndMs = Math.round(
+				clip.startMs + (overlapSourceEnd - clipSourceStart) / speed,
+			);
+			const segDurationMs = timelineEndMs - timelineStartMs;
+			if (segDurationMs >= MIN_EFFECTIVE_CUT_MS) {
+				segments.push({
+					id: `${signal}-seg-${segIdx++}`,
+					signal,
+					sourceStartMs: overlapSourceStart,
+					sourceEndMs: overlapSourceEnd,
+					timelineStartMs,
+					timelineEndMs,
+					durationMs: segDurationMs,
+					peakScore: span.peakScore,
+				});
+			}
+		}
+	}
+
+	return segments;
+}
+
+/**
+ * Synchronous, deterministic multi-signal fusion & cut planner.
+ * Runs in <1ms so UI sliders update detected cuts in real time.
+ */
+export function planSmartCuts(params: {
+	raw: RawActivitySeries;
+	options: SmartCutOptions;
+	clipRegions?: ClipRegion[];
+}): SmartCutAnalysisResult {
+	const { raw, options, clipRegions = [] } = params;
+	const { binCount, binMs, durationMs } = raw;
+
+	const activityScores = new Float32Array(binCount);
+	const strictInactiveScores = new Float32Array(binCount);
+	const speechMask = new Uint8Array(binCount);
+	const strictSpeechMask = new Uint8Array(binCount);
+	const signalScores: Record<SmartCutSignalKey, Float32Array> = {
+		audio: new Float32Array(binCount),
+		input: new Float32Array(binCount),
+		screen: new Float32Array(binCount),
+		webcam: new Float32Array(binCount),
+	};
+
+	if (durationMs <= 0 || binCount <= 0) {
+		return {
+			cuts: [],
+			cutsByCategory: {
+				inactive: [],
+				timing: [],
+				audio: [],
+				input: [],
+				screen: [],
+				webcam: [],
+			},
+			activityScores,
+			speechMask,
+			signalScores,
+			signalSegments: {
+				audio: [],
+				input: [],
+				screen: [],
+				webcam: [],
+			},
+			originalDurationMs: 0,
+			estimatedDurationMs: 0,
+			totalSavedMs: 0,
+		};
+	}
+
+	const mouseDispThreshold = getMouseSensitivityThreshold(options.mouseSensitivity);
+	const screenMapdThreshold = getScreenSensitivityThreshold(options.screenSensitivity);
+	const clickProtectRadiusBins = Math.max(
+		1,
+		Math.round(((options.clickProtectionSec * 1000) / binMs) * 0.5),
+	);
+
+	// Precompute expanded click / text-cursor protection mask
+	const clickProtectedMask = new Uint8Array(binCount);
+	const strictClickProtectedMask = new Uint8Array(binCount);
+	for (let i = 0; i < binCount; i++) {
+		if (raw.mouseClickActive[i] === 1 || raw.textCursorActive[i] === 1) {
+			const start = Math.max(0, i - clickProtectRadiusBins);
+			const end = Math.min(binCount - 1, i + clickProtectRadiusBins);
+			for (let k = start; k <= end; k++) {
+				strictClickProtectedMask[k] = 1;
+				if (options.mouseActivityEnabled) {
+					clickProtectedMask[k] = 1;
+				}
+			}
+		}
+	}
+
+	// Effective audio silence threshold relative to noise floor
+	const effectiveAudioThresholdDb = Math.min(
+		-12,
+		Math.max(options.silenceThresholdDb, raw.audioNoiseFloorDb + 8),
+	);
+
+	// 1. Score each 100ms bin across all enabled signals
+	for (let k = 0; k < binCount; k++) {
+		const hasCaptionSpeech =
+			options.speechProtectionEnabled &&
+			options.useAutoCaptions &&
+			raw.captionActive[k] === 1;
+		const hasAudioEnergy =
+			options.audioSilenceEnabled &&
+			raw.hasAudioSignal &&
+			raw.audioRmsDb[k] >= effectiveAudioThresholdDb;
+		const hasNeighborAudioEnergy =
+			hasAudioEnergy &&
+			(binCount === 1 ||
+				(k > 0 && raw.audioRmsDb[k - 1] >= effectiveAudioThresholdDb - 4) ||
+				(k < binCount - 1 && raw.audioRmsDb[k + 1] >= effectiveAudioThresholdDb - 4));
+
+		const isSustainedSpeech =
+			hasCaptionSpeech || (hasAudioEnergy && hasNeighborAudioEnergy);
+
+		speechMask[k] = isSustainedSpeech && options.speechProtectionEnabled ? 1 : 0;
+
+		// Strict all-signals check for "Inactive" (no mic, no input, no screen activity at all)
+		const rawHasAudio =
+			raw.captionActive[k] === 1 ||
+			(raw.hasAudioSignal && raw.audioRmsDb[k] >= effectiveAudioThresholdDb);
+		const rawNeighborAudio =
+			rawHasAudio &&
+			(binCount === 1 ||
+				(k > 0 && raw.audioRmsDb[k - 1] >= effectiveAudioThresholdDb - 4) ||
+				(k < binCount - 1 && raw.audioRmsDb[k + 1] >= effectiveAudioThresholdDb - 4));
+		const strictSpeech = raw.captionActive[k] === 1 || rawNeighborAudio;
+		strictSpeechMask[k] = strictSpeech ? 1 : 0;
+
+		const strictAudioScore = strictSpeech ? 1.0 : rawHasAudio ? 0.6 : 0;
+		const strictKeyScore = raw.keyboardActive[k] === 1 ? 0.8 : 0;
+		const strictClickScore = strictClickProtectedMask[k] === 1 ? 0.8 : 0;
+		const strictMouseScore = raw.mouseDisplacement[k] >= mouseDispThreshold ? 0.6 : 0;
+		strictInactiveScores[k] = Math.max(
+			strictAudioScore,
+			strictKeyScore,
+			strictClickScore,
+			strictMouseScore,
+		);
+
+		const audioScore = isSustainedSpeech
+			? options.speechProtectionEnabled
+				? 1.0
+				: 0.9
+			: hasAudioEnergy
+				? 0.6
+				: 0;
+		const keyScore = options.keyboardActivityEnabled && raw.keyboardActive[k] === 1 ? 0.8 : 0;
+		const clickScore =
+			options.mouseActivityEnabled && clickProtectedMask[k] === 1 ? 0.8 : 0;
+		const mouseMoveScore =
+			options.mouseActivityEnabled && raw.mouseDisplacement[k] >= mouseDispThreshold
+				? 0.6
+				: 0;
+		const screenScore =
+			options.screenActivityEnabled &&
+			raw.hasScreenSamples &&
+			raw.screenMapd[k] >= screenMapdThreshold
+				? 0.5
+				: 0;
+		const hasWeakPrimaryActivity =
+			(options.mouseActivityEnabled &&
+				raw.mouseDisplacement[k] >= mouseDispThreshold * 0.5) ||
+			(options.screenActivityEnabled &&
+				raw.hasScreenSamples &&
+				raw.screenMapd[k] >= screenMapdThreshold * 0.5);
+		const webcamActiveRaw =
+			options.webcamActivityEnabled &&
+			raw.hasWebcamSamples &&
+			raw.webcamMapd[k] >= 0.015;
+		const webcamScore =
+			webcamActiveRaw && options.webcamRole === "supporting"
+				? hasWeakPrimaryActivity
+					? 0.4
+					: 0.2
+				: 0;
+
+		// Populate individual signal series for per-signal visualization
+		const subAudio =
+			raw.hasAudioSignal && raw.audioRmsDb[k] > raw.audioNoiseFloorDb
+				? Math.min(
+						0.22,
+						Math.max(
+							0,
+							((raw.audioRmsDb[k] - raw.audioNoiseFloorDb) /
+								Math.max(6, effectiveAudioThresholdDb - raw.audioNoiseFloorDb)) *
+								0.22,
+						),
+					)
+				: 0;
+		signalScores.audio[k] = Math.max(audioScore, subAudio);
+
+		const subMouse =
+			options.mouseActivityEnabled && raw.mouseDisplacement[k] > 0
+				? Math.min(0.22, (raw.mouseDisplacement[k] / mouseDispThreshold) * 0.22)
+				: 0;
+		signalScores.input[k] = Math.max(keyScore, clickScore, mouseMoveScore, subMouse);
+
+		const subScreen =
+			options.screenActivityEnabled && raw.hasScreenSamples && raw.screenMapd[k] > 0
+				? Math.min(0.22, (raw.screenMapd[k] / screenMapdThreshold) * 0.22)
+				: 0;
+		signalScores.screen[k] = Math.max(screenScore, subScreen);
+
+		const webcamDisplayScore = webcamActiveRaw
+			? Math.min(0.95, Math.max(0.45, raw.webcamMapd[k] * 12))
+			: options.webcamActivityEnabled && raw.hasWebcamSamples && raw.webcamMapd[k] > 0
+				? Math.min(0.22, (raw.webcamMapd[k] / 0.015) * 0.22)
+				: 0;
+		signalScores.webcam[k] = webcamDisplayScore;
+
+		if (isSustainedSpeech && options.speechProtectionEnabled) {
+			activityScores[k] = 1.0;
+			continue;
+		}
+
+		activityScores[k] = Math.max(
+			audioScore,
+			keyScore,
+			clickScore,
+			mouseMoveScore,
+			screenScore,
+			webcamScore,
+		);
+	}
+
+	const effectiveClips: ClipRegion[] =
+		clipRegions.length > 0
+			? sortClipRegions(clipRegions)
+			: [
+					{
+						id: "clip-1",
+						startMs: 0,
+						endMs: durationMs,
+						sourceStartMs: 0,
+						speed: 1,
+					},
+				];
+
+	const originalDurationMs = getTimelineDurationMs(effectiveClips, durationMs);
+	const emptyProtectMask = new Uint8Array(binCount);
+
+	const inactiveCuts = extractRemovableCutsFromScores({
+		category: "inactive",
+		scores: strictInactiveScores,
+		protectMask: strictSpeechMask,
+		options,
+		binMs,
+		durationMs,
+		effectiveClips,
+		idPrefix: "inactive-cut",
+	});
+
+	const cuts = extractRemovableCutsFromScores({
+		category: "timing",
+		scores: activityScores,
+		protectMask: speechMask,
+		options,
+		binMs,
+		durationMs,
+		effectiveClips,
+		idPrefix: "smart-cut",
+	});
+
+	const hasAudioSource =
+		(options.speechProtectionEnabled || options.audioSilenceEnabled) &&
+		(raw.hasAudioSignal ||
+			(options.useAutoCaptions && raw.captionActive.some((v) => v === 1)));
+	const audioCuts = hasAudioSource
+		? extractRemovableCutsFromScores({
+				category: "audio",
+				scores: signalScores.audio,
+				protectMask: speechMask,
+				options,
+				binMs,
+				durationMs,
+				effectiveClips,
+				idPrefix: "audio-cut",
+			})
+		: [];
+
+	const hasInputSource =
+		(options.mouseActivityEnabled || options.keyboardActivityEnabled) &&
+		(raw.mouseDisplacement.some((v) => v > 0) ||
+			raw.mouseClickActive.some((v) => v === 1) ||
+			raw.keyboardActive.some((v) => v === 1));
+	const inputCuts = hasInputSource
+		? extractRemovableCutsFromScores({
+				category: "input",
+				scores: signalScores.input,
+				protectMask: emptyProtectMask,
+				options,
+				binMs,
+				durationMs,
+				effectiveClips,
+				idPrefix: "input-cut",
+			})
+		: [];
+
+	const screenCuts =
+		options.screenActivityEnabled && raw.hasScreenSamples
+			? extractRemovableCutsFromScores({
+					category: "screen",
+					scores: signalScores.screen,
+					protectMask: emptyProtectMask,
+					options,
+					binMs,
+					durationMs,
+					effectiveClips,
+					idPrefix: "screen-cut",
+				})
+			: [];
+
+	const webcamCuts =
+		options.webcamActivityEnabled &&
+		options.webcamRole === "supporting" &&
+		raw.hasWebcamSamples
+			? extractRemovableCutsFromScores({
+					category: "webcam",
+					scores: signalScores.webcam,
+					protectMask: emptyProtectMask,
+					options,
+					binMs,
+					durationMs,
+					effectiveClips,
+					idPrefix: "webcam-cut",
+				})
+			: [];
+
+	const cutsByCategory: Record<SmartCutSignalCategory, SmartCutCandidate[]> = {
+		inactive: inactiveCuts,
+		timing: cuts,
+		audio: audioCuts,
+		input: inputCuts,
+		screen: screenCuts,
+		webcam: webcamCuts,
+	};
+
 	const totalSavedMs = Math.min(
 		Math.max(0, originalDurationMs - MIN_SURVIVING_TIMELINE_MS),
 		cuts.reduce((acc, cut) => acc + (cut.enabled ? cut.durationMs : 0), 0),
@@ -406,10 +714,44 @@ export function planSmartCuts(params: {
 		originalDurationMs - totalSavedMs,
 	);
 
+	const signalSegments: Record<SmartCutSignalKey, SmartCutSignalSegment[]> = {
+		audio: extractSignalSegments({
+			signal: "audio",
+			scores: signalScores.audio,
+			binMs,
+			durationMs,
+			effectiveClips,
+		}),
+		input: extractSignalSegments({
+			signal: "input",
+			scores: signalScores.input,
+			binMs,
+			durationMs,
+			effectiveClips,
+		}),
+		screen: extractSignalSegments({
+			signal: "screen",
+			scores: signalScores.screen,
+			binMs,
+			durationMs,
+			effectiveClips,
+		}),
+		webcam: extractSignalSegments({
+			signal: "webcam",
+			scores: signalScores.webcam,
+			binMs,
+			durationMs,
+			effectiveClips,
+		}),
+	};
+
 	return {
 		cuts,
+		cutsByCategory,
 		activityScores,
 		speechMask,
+		signalScores,
+		signalSegments,
 		originalDurationMs,
 		estimatedDurationMs,
 		totalSavedMs,

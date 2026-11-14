@@ -1,4 +1,11 @@
-import type { ComponentProps, Dispatch, SetStateAction } from "react";
+import {
+	type ComponentProps,
+	type Dispatch,
+	type SetStateAction,
+	useCallback,
+	useMemo,
+	useRef,
+} from "react";
 import type { AspectRatio } from "@/utils/aspectRatioUtils";
 import { useClipAudioReset } from "../audio/useClipAudioReset";
 import {
@@ -18,6 +25,13 @@ import { SettingsPanel } from "../SettingsPanel";
 import type { useAppearanceState } from "../state/useAppearanceState";
 import type { useTimelineState } from "../state/useTimelineState";
 import { type EditorEffectSection, mapTimelineTimeToSourceTime } from "../types";
+
+const EMPTY_SOURCE_AUDIO_TRACK_META: NonNullable<
+	ComponentProps<typeof SettingsPanel>["sourceAudioTrackMeta"]
+> = [];
+const EMPTY_SOURCE_AUDIO_TRACK_SETTINGS: NonNullable<
+	ComponentProps<typeof SettingsPanel>["sourceAudioTrackSettings"]
+> = {};
 
 type Input = {
 	activeEffectSection: EditorEffectSection;
@@ -91,32 +105,109 @@ export function useEditorSettingsPanelProps(input: Input): ComponentProps<typeof
 	);
 
 	const clipAudioReset = useClipAudioReset(timeline);
+	const resetClipAudioRef = useRef(clipAudioReset.onResetClipAudio);
+	resetClipAudioRef.current = clipAudioReset.onResetClipAudio;
+	const onResetClipAudio = useCallback(() => {
+		resetClipAudioRef.current();
+	}, []);
 
 	const sourceAudioTrackSettings =
 		(timeline.selectedClipId
 			? audio?.selectedClipSourceAudioTrackSettings
-			: (audio?.activeSourceAudioTrackSettings ?? audio?.selectedClipSourceAudioTrackSettings)) ?? {};
+			: (audio?.activeSourceAudioTrackSettings ?? audio?.selectedClipSourceAudioTrackSettings)) ??
+		EMPTY_SOURCE_AUDIO_TRACK_SETTINGS;
 
-	const showSourceAudioTrack = timeline.clipRegions.some((clip) => clip.showSourceAudio);
-	const handleShowSourceAudioTrackChange = (show: boolean) => {
-		timeline.setClipRegions((prev) =>
-			prev.map((clip) => ({ ...clip, showSourceAudio: show })),
+	const currentTimeRef = useRef(currentTime);
+	currentTimeRef.current = currentTime;
+	const durationRef = useRef(input.duration);
+	durationRef.current = input.duration;
+	const audioPortionsLengthRef = useRef(timeline.audioPortions.length);
+	audioPortionsLengthRef.current = timeline.audioPortions.length;
+	const selectedAudioPortionIdRef = useRef(timeline.selectedAudioPortionId);
+	selectedAudioPortionIdRef.current = timeline.selectedAudioPortionId;
+	const onSeekRef = useRef(input.onSeek);
+	onSeekRef.current = input.onSeek;
+
+	const showSourceAudioTrack = useMemo(
+		() => timeline.clipRegions.some((clip) => clip.showSourceAudio),
+		[timeline.clipRegions],
+	);
+	const handleShowSourceAudioTrackChange = useCallback(
+		(show: boolean) => {
+			timeline.setClipRegions((prev) => prev.map((clip) => ({ ...clip, showSourceAudio: show })));
+		},
+		[timeline.setClipRegions],
+	);
+	const onZoomDepthChange = useCallback(
+		(
+			depth: Parameters<NonNullable<ComponentProps<typeof SettingsPanel>["onZoomDepthChange"]>>[0],
+		) => {
+			if (timeline.selectedZoomId) {
+				zoomCommands.handleZoomDepthChange(depth);
+			}
+		},
+		[timeline.selectedZoomId, zoomCommands.handleZoomDepthChange],
+	);
+	const onZoomModeChange = useCallback(
+		(
+			mode: Parameters<NonNullable<ComponentProps<typeof SettingsPanel>["onZoomModeChange"]>>[0],
+		) => {
+			if (timeline.selectedZoomId) {
+				zoomCommands.handleZoomModeChange(mode);
+			}
+		},
+		[timeline.selectedZoomId, zoomCommands.handleZoomModeChange],
+	);
+	const onAudioPortionAdd = useCallback(() => {
+		const portion = createDefaultAudioPortion(
+			currentTimeRef.current * 1000,
+			(durationRef.current ?? 60) * 1000,
+			audioPortionsLengthRef.current + 1,
 		);
-	};
+		timeline.setAudioPortions((prev) => [...prev, portion]);
+		timeline.setSelectedAudioPortionId(portion.id);
+	}, [timeline.setAudioPortions, timeline.setSelectedAudioPortionId]);
+	const onAudioPortionUpdate = useCallback(
+		(id: string, patch: Partial<AudioPortion>) => {
+			timeline.setAudioPortions((prev) =>
+				prev.map((p) =>
+					p.id === id
+						? clampAudioPortion({ ...p, ...patch }, (durationRef.current ?? 60) * 1000)
+						: p,
+				),
+			);
+		},
+		[timeline.setAudioPortions],
+	);
+	const onAudioPortionDelete = useCallback(
+		(id: string) => {
+			timeline.setAudioPortions((prev) => prev.filter((p) => p.id !== id));
+			if (selectedAudioPortionIdRef.current === id) {
+				timeline.setSelectedAudioPortionId(null);
+			}
+		},
+		[timeline.setAudioPortions, timeline.setSelectedAudioPortionId],
+	);
+	const getTimelineCurrentTimeMs = useCallback(() => currentTimeRef.current * 1000, []);
+	const onSeekToMs = useCallback((ms: number) => {
+		onSeekRef.current?.(ms / 1000);
+	}, []);
+	const onOpenNativeCaptureUnavailableModal = useCallback(() => {
+		setNativeCaptureUnavailableModalOpen(true);
+	}, [setNativeCaptureUnavailableModalOpen]);
 
 	return {
-		...clipAudioReset,
+		hasClipAudioOverrides: clipAudioReset.hasClipAudioOverrides,
+		onResetClipAudio,
 		panelMode: "editor",
 		activeEffectSection,
 		selected: appearance.wallpaper,
 		onWallpaperChange: appearance.setWallpaper,
 		selectedZoomDepth: selectedZoom?.depth ?? null,
-		onZoomDepthChange: (depth) =>
-			timeline.selectedZoomId && zoomCommands.handleZoomDepthChange(depth),
+		onZoomDepthChange,
 		selectedZoomId: timeline.selectedZoomId,
 		selectedZoomMode: selectedZoom?.mode ?? (timeline.selectedZoomId ? "auto" : null),
-		onZoomModeChange: (mode) =>
-			timeline.selectedZoomId && zoomCommands.handleZoomModeChange(mode),
+		onZoomModeChange,
 		onZoomDelete: zoomCommands.handleZoomDelete,
 		selectedClipId: timeline.selectedClipId,
 		selectedClipSpeed: selectedClip?.speed ?? (timeline.selectedClipId ? 1 : null),
@@ -134,33 +225,13 @@ export function useEditorSettingsPanelProps(input: Input): ComponentProps<typeof
 		audioPortions: timeline.audioPortions,
 		selectedAudioPortionId: timeline.selectedAudioPortionId,
 		onSelectAudioPortion: timeline.setSelectedAudioPortionId,
-		onAudioPortionAdd: () => {
-			const portion = createDefaultAudioPortion(
-				currentTime * 1000,
-				(input.duration ?? 60) * 1000,
-				timeline.audioPortions.length + 1,
-			);
-			timeline.setAudioPortions((prev) => [...prev, portion]);
-			timeline.setSelectedAudioPortionId(portion.id);
-		},
-		onAudioPortionUpdate: (id: string, patch: Partial<AudioPortion>) => {
-			timeline.setAudioPortions((prev) =>
-				prev.map((p) =>
-					p.id === id ? clampAudioPortion({ ...p, ...patch }, (input.duration ?? 60) * 1000) : p,
-				),
-			);
-		},
-		onAudioPortionDelete: (id: string) => {
-			timeline.setAudioPortions((prev) => prev.filter((p) => p.id !== id));
-			if (timeline.selectedAudioPortionId === id) {
-				timeline.setSelectedAudioPortionId(null);
-			}
-		},
-		timelineCurrentTimeMs: currentTime * 1000,
-		onSeekToMs: (ms: number) => {
-			input.onSeek?.(ms / 1000);
-		},
-		sourceAudioTrackMeta: audio?.sourceAudioTrackMeta ?? [],
+		onAudioPortionAdd,
+		onAudioPortionUpdate,
+		onAudioPortionDelete,
+		timelineCurrentTimeMs: 0,
+		getTimelineCurrentTimeMs,
+		onSeekToMs,
+		sourceAudioTrackMeta: audio?.sourceAudioTrackMeta ?? EMPTY_SOURCE_AUDIO_TRACK_META,
 		sourceAudioTrackSettings,
 		onSourceAudioTrackVolumeChange: audio?.onSourceAudioTrackVolumeChange,
 		onSourceAudioTrackNormalizeChange: audio?.onSourceAudioTrackNormalizeChange,
@@ -235,7 +306,9 @@ export function useEditorSettingsPanelProps(input: Input): ComponentProps<typeof
 		webcam: appearance.webcam,
 		webcamPreviewSrc: appearance.webcam.sourcePath ? appearance.resolvedWebcamVideoUrl : null,
 		webcamPreviewCurrentTime:
-			mapTimelineTimeToSourceTime(currentTime * 1000, timeline.clipRegions) / 1000,
+			activeEffectSection === "webcam" && !isPlaying
+				? mapTimelineTimeToSourceTime(currentTime * 1000, timeline.clipRegions) / 1000
+				: 0,
 		webcamPreviewPlaying: isPlaying,
 		onWebcamChange: appearance.setWebcam,
 		onUploadWebcam: handleUploadWebcam,
@@ -260,7 +333,10 @@ export function useEditorSettingsPanelProps(input: Input): ComponentProps<typeof
 		onPickWhisperModel: autoCaptionController.handlePickWhisperModel,
 		onGenerateAutoCaptions: autoCaptionController.handleGenerateAutoCaptions,
 		onClearAutoCaptions: captionCommands.handleClearAutoCaptions,
-		captionCurrentTimeMs: mapTimelineTimeToSourceTime(currentTime * 1000, timeline.clipRegions),
+		captionCurrentTimeMs:
+			activeEffectSection === "captions" || activeEffectSection === "caption"
+				? mapTimelineTimeToSourceTime(currentTime * 1000, timeline.clipRegions)
+				: 0,
 		selectedCaptionId: timeline.selectedCaptionId,
 		onBeginCaptionEdit: captionCommands.handleBeginCaptionEdit,
 		onCaptionTextEdit: captionCommands.handleCaptionTextEdit,
@@ -271,7 +347,7 @@ export function useEditorSettingsPanelProps(input: Input): ComponentProps<typeof
 		onDownloadWhisperSmallModel: autoCaptionController.handleDownloadWhisperSmallModel,
 		onDeleteWhisperSmallModel: autoCaptionController.handleDeleteWhisperSmallModel,
 		nativeCaptureUnavailableSession: sessionNativeCaptureUnavailable,
-		onOpenNativeCaptureUnavailableModal: () => setNativeCaptureUnavailableModalOpen(true),
+		onOpenNativeCaptureUnavailableModal,
 		onAnnotationContentChange: annotationCommands.handleAnnotationContentChange,
 		onAnnotationTypeChange: annotationCommands.handleAnnotationTypeChange,
 		onAnnotationStyleChange: annotationCommands.handleAnnotationStyleChange,

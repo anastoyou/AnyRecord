@@ -419,27 +419,38 @@ export async function resolveAuthenticatedUser(
 
 export async function adoptLocalDeviceConnectionIfNeeded(userId: string): Promise<void> {
 	try {
-		const localUserId = await getOrCreateLocalDeviceUserId();
-		if (!localUserId || localUserId === userId) return;
-
 		const backend = getCloudinaryBackend();
 		await backend.schemaReady;
 
 		const existingForUser = await backend.store.getConnection(userId);
 		if (existingForUser && existingForUser.status !== "revoked") return;
 
-		const localConn = await backend.store.getConnection(localUserId);
-		if (!localConn || localConn.status === "revoked") return;
+		const localUserId = await getOrCreateLocalDeviceUserId();
+		let sourceConn =
+			localUserId && localUserId !== userId
+				? await backend.store.getConnection(localUserId)
+				: null;
+
+		if (!sourceConn || sourceConn.status === "revoked") {
+			const fallbackConn = await backend.store.getAnyActiveConnection();
+			if (fallbackConn && fallbackConn.userId !== userId && fallbackConn.status !== "revoked") {
+				sourceConn = fallbackConn;
+			}
+		}
+
+		if (!sourceConn || sourceConn.status === "revoked") return;
+		const sourceUserId = sourceConn.userId;
+		if (!sourceUserId || sourceUserId === userId) return;
 
 		const tokenEncryptionKey = getEnvVar("CLOUDINARY_TOKEN_KEY");
 		if (!tokenEncryptionKey) return;
 		const plainAccess = await decryptSecret(
-			localConn.accessTokenEnc,
+			sourceConn.accessTokenEnc,
 			tokenEncryptionKey,
-			localUserId,
+			sourceUserId,
 		);
-		const plainRefresh = localConn.refreshTokenEnc
-			? await decryptSecret(localConn.refreshTokenEnc, tokenEncryptionKey, localUserId)
+		const plainRefresh = sourceConn.refreshTokenEnc
+			? await decryptSecret(sourceConn.refreshTokenEnc, tokenEncryptionKey, sourceUserId)
 			: null;
 
 		const newAccessEnc = await encryptSecret(plainAccess, tokenEncryptionKey, userId);
@@ -449,17 +460,17 @@ export async function adoptLocalDeviceConnectionIfNeeded(userId: string): Promis
 
 		const migrated = await backend.store.upsertConnection({
 			userId,
-			cloudName: localConn.cloudName,
-			accountLabel: localConn.accountLabel,
-			subject: localConn.subject,
-			issuerOrigin: localConn.issuerOrigin || "",
-			scopes: localConn.scopes,
+			cloudName: sourceConn.cloudName,
+			accountLabel: sourceConn.accountLabel,
+			subject: sourceConn.subject,
+			issuerOrigin: sourceConn.issuerOrigin || "",
+			scopes: sourceConn.scopes,
 			accessTokenEnc: newAccessEnc,
 			refreshTokenEnc: newRefreshEnc,
-			accessExpiresAt: localConn.accessExpiresAt,
+			accessExpiresAt: sourceConn.accessExpiresAt,
 		});
 
-		const localMedia = await backend.store.listMedia(localUserId, 200);
+		const localMedia = await backend.store.listMedia(sourceUserId, 200);
 		for (const item of localMedia) {
 			await backend.store.upsertMedia({
 				userId,
@@ -476,10 +487,20 @@ export async function adoptLocalDeviceConnectionIfNeeded(userId: string): Promis
 				originalFilename: item.originalFilename,
 				title: item.title,
 			});
-			await backend.store.deleteMedia(localUserId, item.id);
 		}
 
-		await backend.store.deleteConnection(localUserId);
+		const localProjects = await backend.store.listCloudProjects(sourceUserId);
+		for (const proj of localProjects) {
+			await backend.store.upsertCloudProject({
+				userId,
+				projectId: proj.projectId,
+				name: proj.name,
+				videoUrl: proj.videoUrl,
+				videoPublicId: proj.videoPublicId,
+				thumbnailUrl: proj.thumbnailUrl,
+				projectData: proj.projectData,
+			});
+		}
 	} catch {
 		// Ignore adoption errors; user can still connect via OAuth
 	}
@@ -742,9 +763,9 @@ async function uploadViaMcpGateway(options: {
 					if (!uploadRes.ok) {
 						const errMsg =
 							json &&
-							typeof json.error === "object" &&
-							json.error &&
-							"message" in json.error
+								typeof json.error === "object" &&
+								json.error &&
+								"message" in json.error
 								? String((json.error as { message: unknown }).message)
 								: `Cloudinary upload failed (${uploadRes.status}).`;
 						throw new Error(errMsg);
@@ -798,9 +819,9 @@ async function uploadViaMcpGateway(options: {
 					if (!uploadRes.ok) {
 						const errMsg =
 							json &&
-							typeof json.error === "object" &&
-							json.error &&
-							"message" in json.error
+								typeof json.error === "object" &&
+								json.error &&
+								"message" in json.error
 								? String((json.error as { message: unknown }).message)
 								: `Cloudinary chunked upload failed (${uploadRes.status}).`;
 						throw new Error(errMsg);
@@ -925,9 +946,9 @@ async function uploadViaDirectRestApi(options: {
 				if (!response.ok) {
 					const errorMsg =
 						json &&
-						typeof json.error === "object" &&
-						json.error &&
-						"message" in json.error
+							typeof json.error === "object" &&
+							json.error &&
+							"message" in json.error
 							? String((json.error as { message: unknown }).message)
 							: `Cloudinary upload failed (${response.status}).`;
 					if (response.status === 401 || response.status === 403) {
@@ -1004,9 +1025,9 @@ async function uploadViaDirectRestApi(options: {
 					}
 					const errorMsg =
 						json &&
-						typeof json.error === "object" &&
-						json.error &&
-						"message" in json.error
+							typeof json.error === "object" &&
+							json.error &&
+							"message" in json.error
 							? String((json.error as { message: unknown }).message)
 							: `Cloudinary chunked upload failed (${response.status}).`;
 					throw new Error(errorMsg);
@@ -1832,7 +1853,7 @@ export function registerCloudinaryHandlers() {
 
 				const thumbnailUrl =
 					typeof input.thumbnailDataUrl === "string" &&
-					input.thumbnailDataUrl.startsWith("data:")
+						input.thumbnailDataUrl.startsWith("data:")
 						? input.thumbnailDataUrl
 						: videoUrl.replace(/\.[^.]+$/, ".jpg");
 

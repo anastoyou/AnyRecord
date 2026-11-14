@@ -136,6 +136,13 @@ export interface TimelineEditorHandle {
 	keyframes: { id: string; time: number }[];
 }
 
+const EMPTY_SPAN_RECORD: Record<string, Span> = {};
+const EMPTY_STRING_ARRAY: string[] = [];
+const EMPTY_LIVE_ZOOM_PREVIEW = {
+	previewSpans: EMPTY_SPAN_RECORD,
+	hiddenZoomIds: EMPTY_STRING_ARRAY,
+};
+
 const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 	function TimelineEditor(
 		{
@@ -244,9 +251,13 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			timelineContainerRef,
 		});
 
-		const [liveSpanPreviewById, setLiveSpanPreviewById] = useState<Record<string, Span>>({});
+		const [liveSpanPreviewById, setLiveSpanPreviewById] =
+			useState<Record<string, Span>>(EMPTY_SPAN_RECORD);
 		const [isDragging, setIsDragging] = useState(false);
 		const liveZoomPreview = useMemo(() => {
+			if (Object.keys(liveSpanPreviewById).length === 0) {
+				return EMPTY_LIVE_ZOOM_PREVIEW;
+			}
 			const previewSpans: Record<string, Span> = { ...liveSpanPreviewById };
 			const hiddenZoomIds = new Set<string>();
 
@@ -291,7 +302,11 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 				}
 			}
 
-			return { previewSpans, hiddenZoomIds };
+			return {
+				previewSpans,
+				hiddenZoomIds:
+					hiddenZoomIds.size === 0 ? EMPTY_STRING_ARRAY : Array.from(hiddenZoomIds),
+			};
 		}, [clipRegions, liveSpanPreviewById, zoomRegions]);
 		const { shortcuts: keyShortcuts, isMac } = useShortcuts();
 		const { peaks: sourceAudioPeaks, loading: sourceAudioLoading } = useTimelineAudioPeaks(
@@ -548,7 +563,7 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 									if (!(id in prev)) return prev;
 									const next = { ...prev };
 									delete next[id];
-									return next;
+									return Object.keys(next).length === 0 ? EMPTY_SPAN_RECORD : next;
 								}
 								const current = prev[id];
 								if (
@@ -616,7 +631,7 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 							getSourceAudioTrackSettingsForClip={getSourceAudioTrackSettingsForClip}
 							showSourceAudioTrack={showSourceAudioTrack}
 							liveSpanPreviewById={liveZoomPreview.previewSpans}
-							liveHiddenItemIds={Array.from(liveZoomPreview.hiddenZoomIds)}
+							liveHiddenItemIds={liveZoomPreview.hiddenZoomIds}
 							isDragging={isDragging}
 							isLoading={isLoading}
 						/>

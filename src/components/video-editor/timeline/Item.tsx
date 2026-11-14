@@ -12,7 +12,7 @@ import {
 import { ClipFilmstrip } from "./components/filmstrip/ClipFilmstrip";
 import type { Span, GetSpanFromDragEvent, GetSpanFromResizeEvent } from "dnd-timeline";
 import { useItem, useTimelineContext } from "dnd-timeline";
-import { useCallback, useMemo, useRef } from "react";
+import { memo, useCallback, useMemo, useRef } from "react";
 import { useDndMonitor } from "@dnd-kit/core";
 import { useTimelinePresentation } from "./core/TimelinePresentation";
 import { getRegionDisplaySpan, snapRegionSpan } from "./core/clipPresentation";
@@ -67,7 +67,7 @@ const ZOOM_LABELS: Record<number, string> = {
 	6: "5×",
 };
 
-export default function Item({
+function Item({
 	clipPresentation: suppliedPresentation,
 	id,
 	sharedLeftGrip = false,
@@ -454,3 +454,5 @@ export default function Item({
 		</div>
 	);
 }
+
+export default memo(Item);

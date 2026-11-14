@@ -46,7 +46,9 @@ export function computeFrameLuminanceMapd(
 				0.299 * currRgba[idx] + 0.587 * currRgba[idx + 1] + 0.114 * currRgba[idx + 2];
 
 			const weight = inCenterY && x >= xMin && x < xMax ? 2.0 : 1.0;
-			weightedDiffSum += (Math.abs(currY - prevY) / 255) * weight;
+			const rawDiff = Math.abs(currY - prevY);
+			const cleanDiff = rawDiff <= 4 ? 0 : rawDiff;
+			weightedDiffSum += (cleanDiff / 255) * weight;
 			weightSum += weight;
 		}
 	}
@@ -60,7 +62,12 @@ function seekVideoWithTimeout(
 	timeoutMs = 800,
 ): Promise<boolean> {
 	return new Promise((resolve) => {
-		if (Math.abs(video.currentTime - timeSec) < 0.01 && video.readyState >= 2) {
+		const targetSec =
+			Number.isFinite(video.duration) && video.duration > 0
+				? Math.max(0, Math.min(timeSec, Math.max(0, video.duration - 0.001)))
+				: Math.max(0, timeSec);
+
+		if (Math.abs(video.currentTime - targetSec) < 0.01 && video.readyState >= 2) {
 			resolve(true);
 			return;
 		}
@@ -72,7 +79,7 @@ function seekVideoWithTimeout(
 			clearTimeout(timer);
 			video.removeEventListener("seeked", onSeeked);
 			video.removeEventListener("error", onError);
-			resolve(ok);
+			resolve(ok && Math.abs(video.currentTime - targetSec) <= 0.25);
 		};
 
 		const onSeeked = () => finish(true);
@@ -83,7 +90,7 @@ function seekVideoWithTimeout(
 		video.addEventListener("error", onError, { once: true });
 
 		try {
-			video.currentTime = timeSec;
+			video.currentTime = targetSec;
 		} catch {
 			finish(false);
 		}
@@ -198,7 +205,10 @@ export async function extractVideoMotionSeries(params: {
 					centerWeighted,
 				);
 				const startBin = Math.max(0, Math.floor(prevTimeMs / binMs));
-				const endBin = Math.min(binCount - 1, Math.floor(sampleTimeMs / binMs));
+				const endBin = Math.min(
+					binCount - 1,
+					Math.max(startBin, Math.ceil(sampleTimeMs / binMs) - 1),
+				);
 				for (let b = startBin; b <= endBin; b++) {
 					mapd[b] = Math.max(mapd[b], diff);
 				}

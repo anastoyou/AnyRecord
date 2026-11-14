@@ -32,7 +32,10 @@ import {
 import { type AspectRatio, formatAspectRatioForCSS } from "@/utils/aspectRatioUtils";
 import { cn } from "@/lib/utils";
 import { StudioLightGizmoOverlay } from "./studioLighting/StudioLightGizmoOverlay";
-import { renderStudioLightingToCanvas } from "./studioLighting/studioLightingEngine";
+import {
+	renderStudioLightingToCanvas,
+	StudioLightingEngine,
+} from "./studioLighting/studioLightingEngine";
 import { AnnotationOverlay } from "./AnnotationOverlay";
 import { GestureObjectOverlay } from "./gestures/GestureObjectOverlay";
 import type { FingerGestureRegion, GestureTrackingSettings } from "./gestures/gestureTypes";
@@ -475,11 +478,30 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 		const clipPlaybackRef = useRef<ReturnType<typeof createClipPlayback> | null>(null);
 		const onPlaybackErrorRef = useRef(onError);
 		const timelineTimeRef = useRef(timelineTime);
+		const volumeRef = useRef(volume);
+		const audioPortionsRef = useRef(audioPortions);
 		useEffect(() => {
 			onPlaybackErrorRef.current = onError;
 			timelineTimeRef.current = timelineTime;
 		}, [onError, timelineTime]);
+		useEffect(() => {
+			volumeRef.current = volume;
+			audioPortionsRef.current = audioPortions;
+		}, [volume, audioPortions]);
 		const currentTimeRef = useRef(0);
+		const needsAnnotationSceneTransform =
+			(annotationRegions?.length ?? 0) > 0 || Boolean(gestureSettings?.enabled);
+		const needsAnnotationSceneTransformRef = useRef(needsAnnotationSceneTransform);
+		useEffect(() => {
+			needsAnnotationSceneTransformRef.current = needsAnnotationSceneTransform;
+			if (!needsAnnotationSceneTransform) {
+				setAnnotationSceneTransform((current) =>
+					current.scale === 1 && current.x === 0 && current.y === 0
+						? current
+						: { scale: 1, x: 0, y: 0 },
+				);
+			}
+		}, [needsAnnotationSceneTransform]);
 		useEffect(() => {
 			clipRegionsRef.current = clipRegions;
 			clipPlaybackRef.current?.refresh();
@@ -519,6 +541,9 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 		} | null>(null);
 		const layoutVideoContentRef = useRef<(() => void) | null>(null);
 		const lastWebcamSyncTimeRef = useRef<number | null>(null);
+		const lastWebcamSeekAtMsRef = useRef<number>(0);
+		const lastWebcamBubbleLayoutKeyRef = useRef<string>("");
+		const lastWebcamBubbleMaskKeyRef = useRef<string>("");
 		const lastBackgroundSyncTimeRef = useRef<number | null>(null);
 		const bgVideoRef = useRef<HTMLVideoElement | null>(null);
 		const connectZoomsRef = useRef(connectZooms);
@@ -840,6 +865,19 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 		const webcamTimeOffsetMs = webcam?.timeOffsetMs;
 		const webcamCropRegion = webcam?.cropRegion;
 		const webcamMirror = webcam?.mirror ?? false;
+		const webcamRef = useRef(webcam);
+		const webcamEnabledRef = useRef(webcamEnabled);
+		const webcamTimeOffsetMsRef = useRef(webcamTimeOffsetMs);
+		const webcamVideoPathRef = useRef(webcamVideoPath);
+		const hasMicCompanionTrackRef = useRef(hasMicCompanionTrack);
+		const syncWebcamMediaRef = useRef<(() => void) | null>(null);
+		useEffect(() => {
+			webcamRef.current = webcam;
+			webcamEnabledRef.current = webcamEnabled;
+			webcamTimeOffsetMsRef.current = webcamTimeOffsetMs;
+			webcamVideoPathRef.current = webcamVideoPath;
+			hasMicCompanionTrackRef.current = hasMicCompanionTrack;
+		}, [webcam, webcamEnabled, webcamTimeOffsetMs, webcamVideoPath, hasMicCompanionTrack]);
 		const webcamHeight = getCropMatchedWebcamHeightPercent(
 			webcamWidth,
 			rawWebcamHeight,
@@ -909,102 +947,98 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 					!webcamVideoPath ||
 					!isWebcamVisibleAtSourceTime(webcam, currentTimeRef.current / 1000)
 				) {
-					if (bubble) {
+					if (bubble && lastWebcamBubbleLayoutKeyRef.current !== "hidden") {
 						bubble.style.display = "none";
+						lastWebcamBubbleLayoutKeyRef.current = "hidden";
 					}
 					return;
 				}
-				const scaledMargin = scaleWebcamOverlayPixels(webcamMargin, overlay.clientWidth);
+				const containerWidth = overlay.clientWidth;
+				const containerHeight = overlay.clientHeight;
+				const scaledMargin = scaleWebcamOverlayPixels(webcamMargin, containerWidth);
+
+				let x: number;
+				let y: number;
+				let width: number;
+				let height: number;
+				let scaledRadius: number;
 
 				if (isWebcamFixed(webcam)) {
 					const fixedLayout = getFixedWebcamDimensionsAndPosition({
-						containerWidth: overlay.clientWidth,
-						containerHeight: overlay.clientHeight,
+						containerWidth,
+						containerHeight,
 						margin: scaledMargin,
 						heightPercent: webcam?.fixedHeightPercent,
 					});
+					x = fixedLayout.x;
+					y = fixedLayout.y;
+					width = fixedLayout.width;
+					height = fixedLayout.height;
+					scaledRadius = getWebcamCornerRadiusPx(webcamRoundness, width, height);
+				} else {
+					const effectiveZoomScale = webcamReactToZoom
+						? Math.round(zoomScale * 200) / 200
+						: 1;
+					const scaledDimensions = getWebcamOverlayDimensionsPx({
+						containerWidth,
+						containerHeight,
+						widthPercent: webcamWidth,
+						heightPercent: webcamHeight,
+						margin: scaledMargin,
+						zoomScale: effectiveZoomScale,
+						reactToZoom: webcamReactToZoom,
+					});
+					width = scaledDimensions.width;
+					height = scaledDimensions.height;
+					scaledRadius = getWebcamCornerRadiusPx(webcamRoundness, width, height);
+					const pos = getWebcamOverlayPosition({
+						containerWidth,
+						containerHeight,
+						width,
+						height,
+						margin: scaledMargin,
+						positionPreset: webcamPositionPreset,
+						positionX: webcamPositionX,
+						positionY: webcamPositionY,
+						legacyCorner: webcamCorner,
+					});
+					x = pos.x;
+					y = pos.y;
+				}
 
-					const scaledRadius = getWebcamCornerRadiusPx(
-						webcamRoundness,
-						fixedLayout.width,
-						fixedLayout.height,
-					);
+				const layoutKey = `${x.toFixed(1)}:${y.toFixed(1)}:${width.toFixed(1)}:${height.toFixed(1)}:${scaledRadius.toFixed(1)}:${webcamShadow}`;
+				if (lastWebcamBubbleLayoutKeyRef.current === layoutKey) {
+					return;
+				}
+				lastWebcamBubbleLayoutKeyRef.current = layoutKey;
 
-					bubble.style.display = "block";
-					bubble.style.left = `${fixedLayout.x}px`;
-					bubble.style.top = `${fixedLayout.y}px`;
-					bubble.style.width = `${fixedLayout.width}px`;
-					bubble.style.height = `${fixedLayout.height}px`;
-					bubble.style.aspectRatio = `${fixedLayout.width} / ${fixedLayout.height}`;
+				bubble.style.display = "block";
+				bubble.style.left = `${x}px`;
+				bubble.style.top = `${y}px`;
+				bubble.style.width = `${width}px`;
+				bubble.style.height = `${height}px`;
+				bubble.style.aspectRatio = `${width} / ${height}`;
+				bubble.style.borderRadius = "0px";
+				bubble.style.boxShadow = "none";
+
+				const maskKey = `${width.toFixed(1)}:${height.toFixed(1)}:${scaledRadius.toFixed(1)}:${webcamShadow}`;
+				if (lastWebcamBubbleMaskKeyRef.current !== maskKey) {
+					lastWebcamBubbleMaskKeyRef.current = maskKey;
 					const squirclePath = getSquircleSvgPath({
 						x: 0,
 						y: 0,
-						width: fixedLayout.width,
-						height: fixedLayout.height,
+						width,
+						height,
 						radius: scaledRadius,
 					});
-					const shadowSize = Math.min(fixedLayout.width, fixedLayout.height);
+					const shadowSize = Math.min(width, height);
 					bubble.style.filter = getWebcamShadowFilter(shadowSize, webcamShadow);
-					bubble.style.borderRadius = "0px";
-					bubble.style.boxShadow = "none";
-
 					bubbleInner.style.borderRadius = "0px";
 					bubbleInner.style.overflow = "hidden";
 					bubbleInner.style.contain = "paint";
 					bubbleInner.style.clipPath = `path('${squirclePath}')`;
 					bubbleInner.style.setProperty("-webkit-clip-path", `path('${squirclePath}')`);
-					return;
 				}
-
-				const scaledDimensions = getWebcamOverlayDimensionsPx({
-					containerWidth: overlay.clientWidth,
-					containerHeight: overlay.clientHeight,
-					widthPercent: webcamWidth,
-					heightPercent: webcamHeight,
-					margin: scaledMargin,
-					zoomScale,
-					reactToZoom: webcamReactToZoom,
-				});
-				const scaledRadius = getWebcamCornerRadiusPx(
-					webcamRoundness,
-					scaledDimensions.width,
-					scaledDimensions.height,
-				);
-				const { x, y } = getWebcamOverlayPosition({
-					containerWidth: overlay.clientWidth,
-					containerHeight: overlay.clientHeight,
-					width: scaledDimensions.width,
-					height: scaledDimensions.height,
-					margin: scaledMargin,
-					positionPreset: webcamPositionPreset,
-					positionX: webcamPositionX,
-					positionY: webcamPositionY,
-					legacyCorner: webcamCorner,
-				});
-
-				bubble.style.display = "block";
-				bubble.style.left = `${x}px`;
-				bubble.style.top = `${y}px`;
-				bubble.style.width = `${scaledDimensions.width}px`;
-				bubble.style.height = `${scaledDimensions.height}px`;
-				bubble.style.aspectRatio = `${scaledDimensions.width} / ${scaledDimensions.height}`;
-				const squirclePath = getSquircleSvgPath({
-					x: 0,
-					y: 0,
-					width: scaledDimensions.width,
-					height: scaledDimensions.height,
-					radius: scaledRadius,
-				});
-				const shadowSize = Math.min(scaledDimensions.width, scaledDimensions.height);
-				bubble.style.filter = getWebcamShadowFilter(shadowSize, webcamShadow);
-				bubble.style.borderRadius = "0px";
-				bubble.style.boxShadow = "none";
-
-				bubbleInner.style.borderRadius = "0px";
-				bubbleInner.style.overflow = "hidden";
-				bubbleInner.style.contain = "paint";
-				bubbleInner.style.clipPath = `path('${squirclePath}')`;
-				bubbleInner.style.setProperty("-webkit-clip-path", `path('${squirclePath}')`);
 			},
 			[
 				webcamCorner,
@@ -1024,12 +1058,60 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 		);
 
 		const studioLightingSettings = webcam?.studioLighting;
+		const previewStudioLightingEngineRef = useRef<StudioLightingEngine | null>(null);
+		const previewStudioLightingFailedCanvasRef = useRef<HTMLCanvasElement | null>(null);
 		const renderStudioLightingFrame = useCallback(() => {
 			const video = webcamVideoRef.current;
 			const canvas = webcamCanvasRef.current;
 			if (!video || !canvas || !studioLightingSettings?.enabled || video.readyState < 2) return;
-			renderStudioLightingToCanvas(video, canvas, studioLightingSettings, false);
+
+			const bubbleRect = webcamBubbleRef.current?.getBoundingClientRect();
+			const dpr = Math.min(2, window.devicePixelRatio || 1);
+			const bubbleMaxPx = bubbleRect
+				? Math.round(Math.max(bubbleRect.width, bubbleRect.height) * dpr)
+				: 0;
+			const maxDimension = bubbleMaxPx > 0 ? Math.max(480, Math.min(720, bubbleMaxPx)) : 640;
+
+			if (previewStudioLightingFailedCanvasRef.current !== canvas) {
+				let engine = previewStudioLightingEngineRef.current;
+				if (engine && engine.getCanvas() !== canvas) {
+					engine.dispose();
+					engine = null;
+					previewStudioLightingEngineRef.current = null;
+				}
+				if (!engine) {
+					engine = new StudioLightingEngine();
+					if (engine.initialize(canvas)) {
+						previewStudioLightingEngineRef.current = engine;
+					} else {
+						engine.dispose();
+						engine = null;
+						previewStudioLightingFailedCanvasRef.current = canvas;
+					}
+				}
+				if (engine?.render(video, studioLightingSettings, false, { maxDimension })) {
+					return;
+				}
+			}
+
+			renderStudioLightingToCanvas(video, canvas, studioLightingSettings, false, {
+				maxDimension,
+			});
 		}, [studioLightingSettings]);
+
+		useEffect(() => {
+			if (!studioLightingSettings?.enabled) {
+				previewStudioLightingEngineRef.current?.dispose();
+				previewStudioLightingEngineRef.current = null;
+				previewStudioLightingFailedCanvasRef.current = null;
+				return;
+			}
+			return () => {
+				previewStudioLightingEngineRef.current?.dispose();
+				previewStudioLightingEngineRef.current = null;
+				previewStudioLightingFailedCanvasRef.current = null;
+			};
+		}, [studioLightingSettings?.enabled]);
 
 		useEffect(() => {
 			if (!studioLightingSettings?.enabled) return;
@@ -1088,7 +1170,12 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 					cancelAnimationFrame(animationFrameId);
 				}
 			};
-		}, [studioLightingSettings?.enabled, isPlaying, renderStudioLightingFrame, timelineTime]);
+		}, [studioLightingSettings?.enabled, isPlaying, renderStudioLightingFrame]);
+
+		useEffect(() => {
+			if (!studioLightingSettings?.enabled || isPlaying) return;
+			renderStudioLightingFrame();
+		}, [studioLightingSettings?.enabled, isPlaying, renderStudioLightingFrame]);
 
 		const clampFocusToStage = useCallback((focus: ZoomFocus, depth: ZoomDepth) => {
 			return clampFocusToStageUtil(focus, depth, stageSizeRef.current);
@@ -1298,11 +1385,20 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 			if (!video) return;
 
 			enablePitchPreservingPlayback(video);
-			const videoPortionGain = getEffectivePortionGain(audioPortions, timelineTime * 1000, "all");
+			const videoPortionGain = getEffectivePortionGain(
+				audioPortions,
+				timelineTimeRef.current * 1000,
+				"all",
+			);
 			const nextVolume = Math.max(0, Math.min(1, volume * videoPortionGain));
-			video.volume = nextVolume;
-			video.muted = nextVolume <= 0.001;
-		}, [volume, audioPortions, timelineTime]);
+			if (Math.abs(video.volume - nextVolume) > 0.001) {
+				video.volume = nextVolume;
+			}
+			const nextMuted = nextVolume <= 0.001;
+			if (video.muted !== nextMuted) {
+				video.muted = nextMuted;
+			}
+		}, [volume, audioPortions]);
 
 		useEffect(() => {
 			layoutVideoContentRef.current = layoutVideoContent;
@@ -1527,8 +1623,12 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				appRef.current?.render();
 			});
 			if (isPlayingRef.current) {
-				bgVideoRef.current?.play().catch(() => undefined);
-				webcamVideoRef.current?.play().catch(() => undefined);
+				if (bgVideoRef.current?.paused && !bgVideoRef.current.ended) {
+					bgVideoRef.current.play().catch(() => undefined);
+				}
+				syncWebcamMediaRef.current?.();
+			} else {
+				syncWebcamMediaRef.current?.();
 			}
 		}, [pixiReady, suspendRendering]);
 
@@ -1571,11 +1671,13 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 			}
 
 			if (isPlaying) {
-				const playPromise = bgVideo.play();
-				if (playPromise) {
-					playPromise.catch(() => undefined);
+				if (bgVideo.paused && !bgVideo.ended) {
+					const playPromise = bgVideo.play();
+					if (playPromise) {
+						playPromise.catch(() => undefined);
+					}
 				}
-			} else {
+			} else if (!bgVideo.paused) {
 				bgVideo.pause();
 			}
 
@@ -1827,9 +1929,19 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 
 		const syncWebcamMedia = useCallback(() => {
 			const webcamVideo = webcamVideoRef.current;
-			if (!webcamVideo || !webcamEnabled || !webcamVideoPath) {
+			const activeWebcam = webcamRef.current;
+			const activeWebcamEnabled = webcamEnabledRef.current;
+			const activeWebcamVideoPath = webcamVideoPathRef.current;
+			if (!webcamVideo || !activeWebcamEnabled || !activeWebcamVideoPath) {
 				return;
 			}
+
+			const playing = isPlayingRef.current;
+			const activeTimelineTime = timelineTimeRef.current;
+			const activeClipRegions = clipRegionsRef.current;
+			const activeAudioPortions = audioPortionsRef.current;
+			const activeWebcamTimeOffsetMs = webcamTimeOffsetMsRef.current;
+			const activeHasMicCompanionTrack = hasMicCompanionTrackRef.current;
 
 			const webcamDuration = Number.isFinite(webcamVideo.duration)
 				? webcamVideo.duration
@@ -1837,7 +1949,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 			const targetTime = getWebcamMediaTargetTimeSeconds({
 				currentTime: currentTimeRef.current / 1000,
 				webcamDuration,
-				timeOffsetMs: webcamTimeOffsetMs,
+				timeOffsetMs: activeWebcamTimeOffsetMs,
 			});
 			const mediaTargetTime =
 				targetTime <= 0 && webcamDuration !== null && webcamDuration > 0
@@ -1845,21 +1957,25 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 					: targetTime;
 
 			if (
-				webcamSynchronizedPathRef.current !== webcamVideoPath &&
+				webcamSynchronizedPathRef.current !== activeWebcamVideoPath &&
 				!isWebcamMediaSynchronized({
 					currentTime: webcamVideo.currentTime,
 					targetTime: mediaTargetTime,
 					readyState: webcamVideo.readyState,
 					isSeeking: webcamVideo.seeking,
+					toleranceSeconds: playing ? 0.6 : 0.12,
 				})
 			) {
-				webcamVideo.pause();
+				if (!webcamVideo.paused) {
+					webcamVideo.pause();
+				}
 				if (
 					webcamVideo.readyState >= HTMLMediaElement.HAVE_METADATA &&
 					!webcamVideo.seeking &&
-					Math.abs(webcamVideo.currentTime - mediaTargetTime) > 0.01
+					Math.abs(webcamVideo.currentTime - mediaTargetTime) > (playing ? 0.25 : 0.01)
 				) {
 					try {
+						lastWebcamSeekAtMsRef.current = performance.now();
 						webcamVideo.currentTime = mediaTargetTime;
 					} catch {
 						// The next media-ready event retries once the source accepts seeks.
@@ -1868,28 +1984,38 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				return;
 			}
 
-			if (webcamSynchronizedPathRef.current !== webcamVideoPath) {
-				webcamSynchronizedPathRef.current = webcamVideoPath;
-				setWebcamSynchronizedPath(webcamVideoPath);
+			if (webcamSynchronizedPathRef.current !== activeWebcamVideoPath) {
+				webcamSynchronizedPathRef.current = activeWebcamVideoPath;
+				setWebcamSynchronizedPath(activeWebcamVideoPath);
 				lastWebcamSyncTimeRef.current = targetTime;
 			}
 
 			const targetPlaybackRate =
-				findClipAtTimelineTime(timelineTime * 1000, clipRegions)?.speed ?? 1;
+				findClipAtTimelineTime(activeTimelineTime * 1000, activeClipRegions)?.speed ?? 1;
 			if (!supportsPreviewPlaybackRate(targetPlaybackRate)) {
-				webcamVideo.pause();
+				if (!webcamVideo.paused) {
+					webcamVideo.pause();
+				}
 				return;
 			}
-			enablePitchPreservingPlayback(webcamVideo);
-			if (Math.abs(webcamVideo.playbackRate - targetPlaybackRate) > 0.001) {
+			// Keep webcam playback rate locked to the clip rate instead of 60fps micro-corrections to avoid Chromium WSOLA/clock flutter.
+			if (Math.abs(webcamVideo.playbackRate - targetPlaybackRate) > 0.002) {
+				enablePitchPreservingPlayback(webcamVideo);
 				webcamVideo.playbackRate = targetPlaybackRate;
 			}
 
 			const previousTimelineTime = lastWebcamSyncTimeRef.current;
+			const timelineJumped =
+				previousTimelineTime === null || Math.abs(targetTime - previousTimelineTime) > 0.25;
+			const nowMs = performance.now();
+			const inPlaybackSeekCooldown =
+				playing && !timelineJumped && nowMs - lastWebcamSeekAtMsRef.current < 750;
 			if (
+				!inPlaybackSeekCooldown &&
+				webcamVideo.readyState >= HTMLMediaElement.HAVE_METADATA &&
 				shouldSeekWebcamMedia({
 					desiredTime: mediaTargetTime,
-					isPlaying,
+					isPlaying: playing,
 					isSeeking: webcamVideo.seeking,
 					previousTimelineTime,
 					timelineTime: targetTime,
@@ -1897,32 +2023,44 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				})
 			) {
 				try {
+					if (!webcamVideo.paused) {
+						webcamVideo.pause();
+					}
+					lastWebcamSeekAtMsRef.current = nowMs;
 					webcamVideo.currentTime = mediaTargetTime;
 				} catch {
 					// no-op
 				}
 			}
 
-			const isVisible = isWebcamVisibleAtSourceTime(webcam, targetTime);
-			const webcamGain = getEffectivePortionGain(audioPortions, timelineTime * 1000, "webcam");
-			const targetVolume = Math.max(0, Math.min(1, (webcam?.volume ?? 1) * webcamGain));
+			const isVisible = isWebcamVisibleAtSourceTime(activeWebcam, targetTime);
+			const webcamGain = getEffectivePortionGain(
+				activeAudioPortions,
+				activeTimelineTime * 1000,
+				"webcam",
+			);
+			const targetVolume = Math.max(0, Math.min(1, (activeWebcam?.volume ?? 1) * webcamGain));
 			if (Math.abs(webcamVideo.volume - targetVolume) > 0.01) {
 				webcamVideo.volume = targetVolume;
 			}
 			const shouldMute =
-				Boolean(webcam?.muted) ||
+				Boolean(activeWebcam?.muted) ||
 				!isVisible ||
-				(!webcam?.showAudioOnTimeline && hasMicCompanionTrack);
+				(!activeWebcam?.showAudioOnTimeline && activeHasMicCompanionTrack);
 			if (webcamVideo.muted !== shouldMute) {
 				webcamVideo.muted = shouldMute;
 			}
 
-			const denoiseEnabled = Boolean(webcam?.noiseSuppressionEnabled);
-			const denoiseRatio = Math.max(0, Math.min(100, webcam?.noiseSuppressionLevel ?? 75)) / 100;
-			if (denoiseEnabled || webcamAudioFilterRef.current?.videoElement === webcamVideo) {
+			const denoiseEnabled = Boolean(activeWebcam?.noiseSuppressionEnabled);
+			const shouldUseDenoiseFilter =
+				denoiseEnabled && !shouldMute && targetVolume > 0.001;
+			const denoiseRatio =
+				Math.max(0, Math.min(100, activeWebcam?.noiseSuppressionLevel ?? 75)) / 100;
+			// Only attach WebAudio to an unmuted webcam track when denoise is active; attaching to muted elements forces unnecessary interactive graph routing.
+			if (shouldUseDenoiseFilter || webcamAudioFilterRef.current?.videoElement === webcamVideo) {
 				try {
 					let filter = webcamAudioFilterRef.current;
-					if (!filter || filter.videoElement !== webcamVideo) {
+					if (shouldUseDenoiseFilter && (!filter || filter.videoElement !== webcamVideo)) {
 						if (filter) {
 							void filter.context.close().catch(() => undefined);
 						}
@@ -1964,14 +2102,17 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 							webcamAudioFilterRef.current = filter;
 						}
 					}
-					if (filter) {
+					if (filter && filter.videoElement === webcamVideo) {
 						const wet = denoiseEnabled ? denoiseRatio : 0;
 						filter.highPass.frequency.value = 85 + wet * 95;
 						filter.lowPass.frequency.value = 13000 - wet * 5000;
 						filter.dryGain.gain.value = Math.max(0, 1 - wet);
 						filter.wetGain.gain.value = wet;
-						if (isPlaying && filter.context.state === "suspended") {
+						const shouldRunContext = playing && !shouldMute && targetVolume > 0.001;
+						if (shouldRunContext && filter.context.state === "suspended") {
 							void filter.context.resume().catch(() => undefined);
+						} else if (!shouldRunContext && filter.context.state === "running") {
+							void filter.context.suspend().catch(() => undefined);
 						}
 					}
 				} catch {
@@ -1979,35 +2120,42 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				}
 			}
 
-			if (isPlaying) {
-				const playPromise = webcamVideo.play();
-				if (playPromise) {
-					playPromise.catch(() => undefined);
+			const mainVideoSeeking = Boolean(isSeekingRef.current || videoRef.current?.seeking);
+			if (playing && !mainVideoSeeking && !webcamVideo.seeking && !suspendRenderingRef.current) {
+				if (webcamVideo.paused && !webcamVideo.ended) {
+					const playPromise = webcamVideo.play();
+					if (playPromise) {
+						playPromise.catch(() => undefined);
+					}
 				}
-			} else {
+			} else if (!webcamVideo.paused) {
 				webcamVideo.pause();
 			}
 
 			lastWebcamSyncTimeRef.current = targetTime;
-		}, [
-			timelineTime,
-			clipRegions,
-			hasMicCompanionTrack,
-			isPlaying,
-			webcam,
-			webcamEnabled,
-			webcamTimeOffsetMs,
-			webcamVideoPath,
-		]);
+		}, []);
+
+		useEffect(() => {
+			syncWebcamMediaRef.current = syncWebcamMedia;
+		}, [syncWebcamMedia]);
 
 		const handleWebcamMediaReady = useCallback(
 			(event: React.SyntheticEvent<HTMLVideoElement>) => {
 				const video = event.currentTarget;
+				if (event.type === "seeked") {
+					lastWebcamSeekAtMsRef.current = performance.now();
+				}
 				if (video.videoWidth > 0 && video.videoHeight > 0 && video.readyState >= 2) {
-					setWebcamVideoDimensions({
-						width: video.videoWidth,
-						height: video.videoHeight,
-					});
+					setWebcamVideoDimensions((prev) =>
+						prev &&
+						prev.width === video.videoWidth &&
+						prev.height === video.videoHeight
+							? prev
+							: {
+									width: video.videoWidth,
+									height: video.videoHeight,
+								},
+					);
 				}
 				syncWebcamMedia();
 			},
@@ -2016,7 +2164,23 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 
 		useEffect(() => {
 			syncWebcamMedia();
-		}, [syncWebcamMedia]);
+		}, [
+			syncWebcamMedia,
+			isPlaying,
+			webcam,
+			webcamEnabled,
+			webcamTimeOffsetMs,
+			webcamVideoPath,
+			hasMicCompanionTrack,
+			audioPortions,
+			clipRegions,
+		]);
+
+		useEffect(() => {
+			if (!isPlayingRef.current) {
+				syncWebcamMedia();
+			}
+		}, [timelineTime, currentTime, syncWebcamMedia]);
 
 		// biome-ignore lint/correctness/useExhaustiveDependencies: The media path intentionally triggers source-specific state reset.
 		useEffect(() => {
@@ -2238,16 +2402,29 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				onTime: (time, source) => {
 					timelineTimeRef.current = time;
 					if (source !== null) currentTimeRef.current = source * 1000;
-					if (videoRef.current && audioPortions && audioPortions.length > 0) {
-						const videoPortionGain = getEffectivePortionGain(audioPortions, time * 1000, "all");
-						const nextVolume = Math.max(0, Math.min(1, volume * videoPortionGain));
-						videoRef.current.volume = nextVolume;
-						videoRef.current.muted = nextVolume <= 0.001;
+					const activeAudioPortions = audioPortionsRef.current;
+					const activeVolume = volumeRef.current;
+					if (videoRef.current && activeAudioPortions && activeAudioPortions.length > 0) {
+						const videoPortionGain = getEffectivePortionGain(
+							activeAudioPortions,
+							time * 1000,
+							"all",
+						);
+						const nextVolume = Math.max(0, Math.min(1, activeVolume * videoPortionGain));
+						if (Math.abs(videoRef.current.volume - nextVolume) > 0.001) {
+							videoRef.current.volume = nextVolume;
+						}
+						const nextMuted = nextVolume <= 0.001;
+						if (videoRef.current.muted !== nextMuted) {
+							videoRef.current.muted = nextMuted;
+						}
 					}
+					syncWebcamMediaRef.current?.();
 					onTimeUpdate(time);
 				},
 				onPlaying: (playing) => {
 					isPlayingRef.current = playing;
+					syncWebcamMediaRef.current?.();
 					onPlayStateChange(playing);
 				},
 				onError: (error) =>
@@ -2265,10 +2442,15 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				if (!preserveCameraAcrossCut || !isPlayingRef.current)
 					shouldSnapPausedFrameRef.current = true;
 				preserveCameraAcrossCut = false;
+				syncWebcamMediaRef.current?.();
 			};
 			const handleSeeking = () => {
 				isSeekingRef.current = true;
 				if (!preserveCameraAcrossCut) shouldSnapPausedFrameRef.current = true;
+				const webcamVideo = webcamVideoRef.current;
+				if (webcamVideo && !webcamVideo.paused) {
+					webcamVideo.pause();
+				}
 			};
 			video.addEventListener("seeked", handleSeeked);
 			video.addEventListener("seeking", handleSeeking);
@@ -2342,21 +2524,23 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				state.x = appliedTransform.x;
 				state.y = appliedTransform.y;
 				state.appliedScale = appliedTransform.scale;
-				setAnnotationSceneTransform((current) => {
-					if (
-						Math.abs(current.scale - appliedTransform.scale) < 0.001 &&
-						Math.abs(current.x - appliedTransform.x) < 0.1 &&
-						Math.abs(current.y - appliedTransform.y) < 0.1
-					) {
-						return current;
-					}
+				if (needsAnnotationSceneTransformRef.current) {
+					setAnnotationSceneTransform((current) => {
+						if (
+							Math.abs(current.scale - appliedTransform.scale) < 0.001 &&
+							Math.abs(current.x - appliedTransform.x) < 0.1 &&
+							Math.abs(current.y - appliedTransform.y) < 0.1
+						) {
+							return current;
+						}
 
-					return {
-						scale: appliedTransform.scale,
-						x: appliedTransform.x,
-						y: appliedTransform.y,
-					};
-				});
+						return {
+							scale: appliedTransform.scale,
+							x: appliedTransform.x,
+							y: appliedTransform.y,
+						};
+					});
+				}
 			};
 
 			const ticker = () => {
@@ -2819,7 +3003,6 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 												)}
 												muted={
 													Boolean(webcam.muted) ||
-													!isWebcamVisibleAtSourceTime(webcam, currentTime) ||
 													(!webcam.showAudioOnTimeline && hasMicCompanionTrack)
 												}
 												playsInline
@@ -2841,7 +3024,14 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 													handleWebcamMediaReady(e);
 													renderStudioLightingFrame();
 												}}
-												onTimeUpdate={renderStudioLightingFrame}
+												onTimeUpdate={(e) => {
+													const video = e.currentTarget as HTMLVideoElement & {
+														requestVideoFrameCallback?: unknown;
+													};
+													if (typeof video.requestVideoFrameCallback !== "function") {
+														renderStudioLightingFrame();
+													}
+												}}
 											/>
 											{webcam.studioLighting?.enabled && (
 												<canvas

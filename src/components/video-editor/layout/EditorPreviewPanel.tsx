@@ -127,11 +127,13 @@ export function EditorPreviewPanel(props: Props) {
 
 	const smartCut = useSmartCutController({
 		videoPath,
-		audioPaths: audio.previewSourceAudioFallbackPaths,
+		audioPaths: audio.sourceAudioFallbackPaths.length > 0
+			? audio.sourceAudioFallbackPaths
+			: audio.previewSourceAudioFallbackPaths,
 		webcamPath: appearance.webcam?.sourcePath ?? null,
-		durationSec: duration ?? projection.timelineDuration,
+		durationSec: duration && duration > 0 ? duration : projection.timelineDuration,
 		clipRegions: timeline.clipRegions,
-		cursorTelemetry: effectiveCursorTelemetry,
+		cursorTelemetry: timeline.cursorTelemetry,
 		autoCaptions: timeline.autoCaptions,
 		onApplySmartCut: (cuts) => clipCommands?.handleApplySmartCut(cuts) ?? null,
 		onSeekPreview: (timeSec) => playback.handleTimelineSeek(timeSec),
@@ -410,6 +412,13 @@ export function EditorPreviewPanel(props: Props) {
 			<SmartCutDialog
 				open={smartCut.isOpen}
 				onOpenChange={smartCut.setIsOpen}
+				videoPath={videoPath}
+				audioPaths={
+					audio.sourceAudioFallbackPaths.length > 0
+						? audio.sourceAudioFallbackPaths
+						: audio.previewSourceAudioFallbackPaths
+				}
+				webcamPath={appearance.webcam?.sourcePath ?? null}
 				options={smartCut.options}
 				onUpdateOptions={smartCut.updateOptions}
 				onResetOptions={smartCut.resetOptions}

@@ -2,6 +2,7 @@ import type { CursorTelemetryPoint } from "@/components/video-editor/types";
 import { SMART_CUT_BIN_MS } from "./smartCutTypes";
 
 const KEYPRESS_DECAY_MS = 1500;
+const MIN_CURSOR_STEP_DIST = 0.0006;
 
 export interface TelemetryActivityBinsResult {
 	mouseDisplacement: Float32Array;
@@ -56,11 +57,12 @@ export function analyzeTelemetryActivityBins(
 		const bin = Math.floor(pt.timeMs / binMs);
 		if (bin < 0 || bin >= binCount) continue;
 
-		if (isClickEvent(pt.interactionType)) {
+		const isClick = isClickEvent(pt.interactionType);
+		if (isClick) {
 			mouseClickActive[bin] = 1;
 		}
 
-		if (pt.cursorType === "text") {
+		if (pt.cursorType === "text" && (isClick || pt.interactionType === "keypress")) {
 			textCursorActive[bin] = 1;
 		}
 
@@ -83,7 +85,9 @@ export function analyzeTelemetryActivityBins(
 				pt.timeMs - prevTimeMs <= 1000
 			) {
 				const dist = Math.hypot(pt.cx - prevCx, pt.cy - prevCy);
-				mouseDisplacement[bin] += dist;
+				if (dist >= MIN_CURSOR_STEP_DIST) {
+					mouseDisplacement[bin] += dist;
+				}
 			}
 			prevCx = pt.cx;
 			prevCy = pt.cy;

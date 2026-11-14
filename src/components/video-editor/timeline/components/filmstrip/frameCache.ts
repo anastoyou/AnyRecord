@@ -3,7 +3,51 @@ import { getRenderableVideoUrl } from "@/lib/assetPath";
 // One background decoder at a time; never seek the editor's playback element.
 let queue: Promise<unknown> = Promise.resolve();
 const frames = new Map<string, string>();
-const MAX_CACHED_FRAMES = 256;
+const MAX_CACHED_FRAMES = 512;
+const FRAME_QUANTIZE_MS = 50;
+const POOLED_VIDEO_IDLE_MS = 4000;
+
+let pooledVideo: HTMLVideoElement | null = null;
+let pooledVideoUrl: string | null = null;
+let pooledVideoLoaded = false;
+let pooledVideoIdleTimer: ReturnType<typeof setTimeout> | null = null;
+let pooledCanvas: HTMLCanvasElement | null = null;
+let pooledContext: CanvasRenderingContext2D | null = null;
+
+function clearPooledVideoIdleTimer() {
+	if (pooledVideoIdleTimer !== null) {
+		clearTimeout(pooledVideoIdleTimer);
+		pooledVideoIdleTimer = null;
+	}
+}
+
+function disposePooledVideo() {
+	clearPooledVideoIdleTimer();
+	pooledVideoLoaded = false;
+	if (!pooledVideo) return;
+	pooledVideo.pause();
+	pooledVideo.removeAttribute("src");
+	pooledVideo.load();
+	pooledVideo = null;
+	pooledVideoUrl = null;
+}
+
+function schedulePooledVideoDispose() {
+	clearPooledVideoIdleTimer();
+	pooledVideoIdleTimer = setTimeout(() => {
+		disposePooledVideo();
+	}, POOLED_VIDEO_IDLE_MS);
+}
+
+function getPooledCanvasContext() {
+	if (!pooledCanvas) {
+		pooledCanvas = document.createElement("canvas");
+		pooledCanvas.width = 160;
+		pooledCanvas.height = 90;
+		pooledContext = pooledCanvas.getContext("2d");
+	}
+	return { canvas: pooledCanvas, context: pooledContext };
+}
 
 function waitForVideo(video: HTMLVideoElement, event: string, signal: AbortSignal) {
 	return new Promise<void>((resolve, reject) => {
@@ -29,40 +73,76 @@ function waitForVideo(video: HTMLVideoElement, event: string, signal: AbortSigna
 	});
 }
 
+async function getDecoderVideo(url: string, signal: AbortSignal): Promise<HTMLVideoElement> {
+	clearPooledVideoIdleTimer();
+	if (
+		pooledVideo &&
+		pooledVideoLoaded &&
+		pooledVideoUrl === url &&
+		pooledVideo.readyState >= 2 &&
+		!pooledVideo.error
+	) {
+		return pooledVideo;
+	}
+
+	disposePooledVideo();
+	const video = document.createElement("video");
+	video.muted = true;
+	video.playsInline = true;
+	video.preload = "auto";
+	video.crossOrigin = "anonymous";
+	pooledVideo = video;
+	pooledVideoUrl = url;
+	pooledVideoLoaded = false;
+
+	const loaded = waitForVideo(video, "loadeddata", signal);
+	video.src = url;
+	await loaded;
+	pooledVideoLoaded = true;
+	return video;
+}
+
 export function extractFilmstrip(
 	path: string,
 	times: number[],
 	signal: AbortSignal,
 ): Promise<string[]> {
 	const job = queue.then(async () => {
-		if (signal.aborted) return [];
-		const keys = times.map((time) => `${path}:${Math.round(time)}`);
-		if (keys.every((key) => frames.has(key))) return keys.map((key) => frames.get(key)!);
+		if (signal.aborted || times.length === 0) return [];
+		const quantizedTimes = times.map(
+			(time) => Math.round(time / FRAME_QUANTIZE_MS) * FRAME_QUANTIZE_MS,
+		);
+		const keys = quantizedTimes.map((time) => `${path}:${time}`);
+		if (keys.every((key) => frames.has(key))) {
+			return keys.map((key) => {
+				const cached = frames.get(key)!;
+				frames.delete(key);
+				frames.set(key, cached);
+				return cached;
+			});
+		}
 		const url = await getRenderableVideoUrl(path);
 		if (signal.aborted) return [];
-		const video = document.createElement("video");
-		video.muted = true;
-		video.playsInline = true;
-		video.preload = "auto";
-		video.crossOrigin = "anonymous";
-		const canvas = document.createElement("canvas");
-		canvas.width = 160;
-		canvas.height = 90;
-		const context = canvas.getContext("2d");
+		const { canvas, context } = getPooledCanvasContext();
 		if (!context) return [];
+
+		let hadError = false;
 		try {
-			const loaded = waitForVideo(video, "loadeddata", signal);
-			video.src = url;
-			await loaded;
+			const video = await getDecoderVideo(url, signal);
+			if (!video.videoWidth || !video.videoHeight) return [];
 			const result: string[] = [];
-			for (let index = 0; index < times.length; index++) {
+			for (let index = 0; index < quantizedTimes.length; index++) {
 				if (signal.aborted) return [];
-				const cached = frames.get(keys[index]);
+				const key = keys[index];
+				const cached = frames.get(key);
 				if (cached) {
+					frames.delete(key);
+					frames.set(key, cached);
 					result.push(cached);
 					continue;
 				}
-				const time = Math.max(0, Math.min(times[index] / 1000, video.duration - 0.001));
+				const maxTime = Number.isFinite(video.duration) && video.duration > 0 ? video.duration - 0.001 : 0;
+				const time = Math.max(0, Math.min(quantizedTimes[index] / 1000, maxTime));
 				if (Math.abs(video.currentTime - time) > 0.0001) {
 					const sought = waitForVideo(video, "seeked", signal);
 					video.currentTime = time;
@@ -85,15 +165,23 @@ export function extractFilmstrip(
 					height,
 				);
 				const frame = canvas.toDataURL("image/jpeg", 0.7);
-				frames.set(keys[index], frame);
+				frames.delete(key);
+				frames.set(key, frame);
 				if (frames.size > MAX_CACHED_FRAMES) frames.delete(frames.keys().next().value!);
 				result.push(frame);
 			}
 			return result;
+		} catch (error) {
+			if (!signal.aborted) {
+				hadError = true;
+			}
+			throw error;
 		} finally {
-			video.pause();
-			video.removeAttribute("src");
-			video.load();
+			if (hadError || !pooledVideoLoaded || pooledVideo?.error) {
+				disposePooledVideo();
+			} else {
+				schedulePooledVideoDispose();
+			}
 		}
 	});
 	queue = job.catch(() => undefined);

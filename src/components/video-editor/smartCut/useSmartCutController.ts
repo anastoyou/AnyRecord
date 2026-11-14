@@ -10,7 +10,7 @@ import {
 	type SmartCutOptions,
 } from "@/lib/smartCut/smartCutTypes";
 
-const STORAGE_KEY = "anyrecord.smartCutOptions.v1";
+const STORAGE_KEY = "anyrecord.smartCutOptions.v2";
 
 function loadSavedSmartCutOptions(): SmartCutOptions {
 	if (typeof window === "undefined") return DEFAULT_SMART_CUT_OPTIONS;
@@ -21,6 +21,9 @@ function loadSavedSmartCutOptions(): SmartCutOptions {
 		return {
 			...DEFAULT_SMART_CUT_OPTIONS,
 			...parsed,
+			prePaddingSec: 0,
+			postPaddingSec: 0,
+			screenActivityEnabled: false,
 		};
 	} catch {
 		return DEFAULT_SMART_CUT_OPTIONS;
@@ -70,10 +73,12 @@ export function useSmartCutController({
 	const [disabledCutIds, setDisabledCutIds] = useState<Set<string>>(new Set());
 
 	const cacheKeyRef = useRef<string | null>(null);
+	const rawSeriesRef = useRef<RawActivitySeries | null>(null);
 	const abortControllerRef = useRef<AbortController | null>(null);
 
 	const durationMs = Math.max(0, Math.round(durationSec * 1000));
-	const currentCacheKey = `${videoPath ?? ""}::${durationMs}::${autoCaptions.length}::${cursorTelemetry.length}::${webcamPath ?? ""}`;
+	const audioKey = (audioPaths ?? []).join("|");
+	const currentCacheKey = `${videoPath ?? ""}::${durationMs}::${autoCaptions.length}::${cursorTelemetry.length}::${webcamPath ?? ""}::${audioKey}`;
 
 	const updateOptions = useCallback((patch: Partial<SmartCutOptions>) => {
 		setOptions((prev) => {
@@ -93,7 +98,7 @@ export function useSmartCutController({
 	const runAnalysis = useCallback(
 		async (force = false) => {
 			if (!videoPath || durationMs <= 0) return;
-			if (!force && rawSeries && cacheKeyRef.current === currentCacheKey) {
+			if (!force && rawSeriesRef.current && cacheKeyRef.current === currentCacheKey) {
 				return;
 			}
 
@@ -124,6 +129,7 @@ export function useSmartCutController({
 
 				if (!controller.signal.aborted) {
 					cacheKeyRef.current = currentCacheKey;
+					rawSeriesRef.current = series;
 					setRawSeries(series);
 					setDisabledCutIds(new Set());
 				}
@@ -144,7 +150,6 @@ export function useSmartCutController({
 			durationMs,
 			cursorTelemetry,
 			autoCaptions,
-			rawSeries,
 			currentCacheKey,
 		],
 	);
@@ -173,16 +178,31 @@ export function useSmartCutController({
 			return baseResult;
 		}
 
-		const cuts = baseResult.cuts.map((cut) => ({
-			...cut,
-			enabled: !disabledCutIds.has(cut.id),
-		}));
-		const totalSavedMs = cuts.reduce((sum, cut) => sum + (cut.enabled ? cut.durationMs : 0), 0);
+		const mapEnabled = (list: SmartCutCandidate[]) =>
+			list.map((cut) => ({
+				...cut,
+				enabled: !disabledCutIds.has(cut.id),
+			}));
+
+		const cuts = mapEnabled(baseResult.cuts);
+		const cutsByCategory = {
+			inactive: mapEnabled(baseResult.cutsByCategory.inactive),
+			timing: cuts,
+			audio: mapEnabled(baseResult.cutsByCategory.audio),
+			input: mapEnabled(baseResult.cutsByCategory.input),
+			screen: mapEnabled(baseResult.cutsByCategory.screen),
+			webcam: mapEnabled(baseResult.cutsByCategory.webcam),
+		};
+		const totalSavedMs = Math.min(
+			Math.max(0, baseResult.originalDurationMs - 500),
+			cuts.reduce((sum, cut) => sum + (cut.enabled ? cut.durationMs : 0), 0),
+		);
 		const estimatedDurationMs = Math.max(500, baseResult.originalDurationMs - totalSavedMs);
 
 		return {
 			...baseResult,
 			cuts,
+			cutsByCategory,
 			totalSavedMs,
 			estimatedDurationMs,
 		};
@@ -200,27 +220,31 @@ export function useSmartCutController({
 		});
 	}, []);
 
-	const applyCuts = useCallback(() => {
-		if (!analysisResult) return false;
-		const enabledCuts = analysisResult.cuts.filter((c) => c.enabled);
-		if (enabledCuts.length === 0) {
-			toast.info("No inactive segments selected to cut.");
-			return false;
-		}
+	const applyCuts = useCallback(
+		(candidateCuts?: SmartCutCandidate[]) => {
+			if (!analysisResult) return false;
+			const targetCuts = candidateCuts ?? analysisResult.cuts;
+			const enabledCuts = targetCuts.filter((c) => c.enabled);
+			if (enabledCuts.length === 0) {
+				toast.info("No removable cuts selected to apply.");
+				return false;
+			}
 
-		const outcome = onApplySmartCut(enabledCuts);
-		if (!outcome || outcome.appliedCutCount === 0) {
-			toast.info("No cuts were applied.");
-			return false;
-		}
+			const outcome = onApplySmartCut(enabledCuts);
+			if (!outcome || outcome.appliedCutCount === 0) {
+				toast.info("No cuts were applied.");
+				return false;
+			}
 
-		const savedSec = (outcome.removedDurationMs / 1000).toFixed(1);
-		toast.success(
-			`Removed ${outcome.appliedCutCount} inactive ${outcome.appliedCutCount === 1 ? "segment" : "segments"} (-${savedSec}s)`,
-		);
-		setIsOpen(false);
-		return true;
-	}, [analysisResult, onApplySmartCut]);
+			const savedSec = (outcome.removedDurationMs / 1000).toFixed(1);
+			toast.success(
+				`Removed ${outcome.appliedCutCount} ${outcome.appliedCutCount === 1 ? "cut" : "cuts"} (-${savedSec}s)`,
+			);
+			setDisabledCutIds(new Set());
+			return true;
+		},
+		[analysisResult, onApplySmartCut],
+	);
 
 	const previewCut = useCallback(
 		(cut: SmartCutCandidate) => {
