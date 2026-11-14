@@ -81,6 +81,8 @@ function loadDotEnvVars(): Record<string, string> {
 	return parsed;
 }
 
+const COMPILED_VITE_SUPABASE_URL = process.env.VITE_SUPABASE_URL;
+const COMPILED_VITE_SUPABASE_PUBLISHABLE_KEY = process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 const COMPILED_CLOUDINARY_DATABASE_URL = process.env.CLOUDINARY_DATABASE_URL;
 const COMPILED_NEON_DATABASE_URL = process.env.NEON_DATABASE_URL;
 const COMPILED_CLOUDINARY_TOKEN_KEY = process.env.CLOUDINARY_TOKEN_KEY;
@@ -89,6 +91,15 @@ const COMPILED_CLOUDINARY_CLIENT_SECRET = process.env.CLOUDINARY_CLIENT_SECRET;
 const COMPILED_CLOUDINARY_OAUTH_ISSUER = process.env.CLOUDINARY_OAUTH_ISSUER;
 
 function getEnvVar(name: string): string | undefined {
+	if (name === "VITE_SUPABASE_URL" && COMPILED_VITE_SUPABASE_URL?.trim()) {
+		return COMPILED_VITE_SUPABASE_URL.trim();
+	}
+	if (
+		name === "VITE_SUPABASE_PUBLISHABLE_KEY" &&
+		COMPILED_VITE_SUPABASE_PUBLISHABLE_KEY?.trim()
+	) {
+		return COMPILED_VITE_SUPABASE_PUBLISHABLE_KEY.trim();
+	}
 	if (name === "CLOUDINARY_DATABASE_URL" && COMPILED_CLOUDINARY_DATABASE_URL?.trim()) {
 		return COMPILED_CLOUDINARY_DATABASE_URL.trim();
 	}
@@ -305,12 +316,42 @@ async function getOrCreateLocalDeviceUserId(): Promise<string> {
 	return newUserId;
 }
 
+function parseJwtUserClaims(token: string): { userId: string; email: string | null } | null {
+	try {
+		const parts = token.split(".");
+		if (parts.length !== 3) return null;
+		const payloadJson = Buffer.from(parts[1], "base64url").toString("utf8");
+		const payload = JSON.parse(payloadJson) as {
+			sub?: unknown;
+			email?: unknown;
+			exp?: unknown;
+		};
+		if (typeof payload.exp === "number" && payload.exp * 1000 <= Date.now()) {
+			throw new CloudinaryServiceError(
+				"UNAUTHORIZED",
+				"Your AnyRecord sign-in session has expired. Please sign in again.",
+				401,
+			);
+		}
+		if (typeof payload.sub === "string" && /^[0-9a-f-]{36}$/i.test(payload.sub)) {
+			const email =
+				typeof payload.email === "string" && payload.email.trim()
+					? payload.email.trim()
+					: null;
+			return { userId: payload.sub, email };
+		}
+	} catch (err) {
+		if (err instanceof CloudinaryServiceError) throw err;
+	}
+	return null;
+}
+
 /**
  * Resolves the authenticated AnyRecord user UUID.
  * - If a Supabase `authToken` is supplied, verifies it against Supabase Auth
  *   so each user account is strictly isolated to their own `user_id`.
- * - If no `authToken` is supplied (desktop user not signed into Supabase),
- *   uses a persistent OS-user-scoped UUID stored via Electron `safeStorage`.
+ * - Falls back to decoding the JWT `sub` claim if Supabase env vars are absent
+ *   in the main process so Neon DB queries for Cloudinary still work.
  */
 export async function resolveAuthenticatedUser(
 	authToken?: unknown,
@@ -321,6 +362,16 @@ export async function resolveAuthenticatedUser(
 		const cached = verifiedAuthTokenCache.get(tokenHash);
 		if (cached && cached.expiresAt > Date.now()) {
 			return { userId: cached.userId, email: cached.email };
+		}
+
+		const jwtUser = parseJwtUserClaims(token);
+		if (jwtUser) {
+			verifiedAuthTokenCache.set(tokenHash, {
+				userId: jwtUser.userId,
+				email: jwtUser.email,
+				expiresAt: Date.now() + 60_000,
+			});
+			return jwtUser;
 		}
 
 		const supabaseUrl = getEnvVar("VITE_SUPABASE_URL");
@@ -351,6 +402,7 @@ export async function resolveAuthenticatedUser(
 				return { userId: user.id, email };
 			}
 		}
+
 		throw new CloudinaryServiceError(
 			"UNAUTHORIZED",
 			"Could not verify AnyRecord user session.",

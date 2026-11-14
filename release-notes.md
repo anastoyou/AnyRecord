@@ -1,3 +1,9 @@
+## What's Changed in AnyRecord v1.4.5
+
+### ☁️ Google Sign-In & Neon DB Cloud Session Fix
+- **Direct Session Resolution for Neon DB**: Fixed `"Could not verify AnyRecord user session."` after signing in with Google by resolving user identity directly from the authenticated JWT `sub` claim before loading Cloudinary connections, media, and projects from Neon PostgreSQL.
+- **Packaged Main-Process Auth Configuration**: Injected `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` into the Electron main process build (`dist-electron/main.cjs`) alongside Neon DB credentials.
+
 ## What's Changed in AnyRecord v1.4.4
 
 ### 🎬 Guest & Local Recording Fix

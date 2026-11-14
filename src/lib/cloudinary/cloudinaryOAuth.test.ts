@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { detectMediaResourceType } from "../../../electron/ipc/register/cloudinary";
+import {
+	detectMediaResourceType,
+	resolveAuthenticatedUser,
+} from "../../../electron/ipc/register/cloudinary";
 import {
 	computeCodeChallengeS256,
 	decryptSecret,
@@ -378,5 +381,16 @@ describe("Cloudinary OAuth 2.0 & Multi-User Integration", () => {
 		const list = await store.listFeedback(10);
 		expect(list.length).toBe(1);
 		expect(list[0].id).toBe(feedback.id);
+	});
+
+	it("resolves user session from JWT sub claim when Supabase endpoint is unreachable", async () => {
+		const validJwt = buildFakeJwt({
+			sub: "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+			email: "google-user@example.com",
+			exp: Math.floor(Date.now() / 1000) + 3600,
+		});
+		const resolved = await resolveAuthenticatedUser(validJwt);
+		expect(resolved.userId).toBe("a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d");
+		expect(resolved.email).toBe("google-user@example.com");
 	});
 });

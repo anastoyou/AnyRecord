@@ -154,6 +154,14 @@ export default defineConfig(({ mode }) => {
 								entry: "electron/main.ts",
 								vite: {
 									define: {
+										"process.env.VITE_SUPABASE_URL": JSON.stringify(
+											process.env.VITE_SUPABASE_URL || env.VITE_SUPABASE_URL || "",
+										),
+										"process.env.VITE_SUPABASE_PUBLISHABLE_KEY": JSON.stringify(
+											process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+												env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+												"",
+										),
 										"process.env.CLOUDINARY_DATABASE_URL": JSON.stringify(
 											process.env.CLOUDINARY_DATABASE_URL || env.CLOUDINARY_DATABASE_URL || "",
 										),
